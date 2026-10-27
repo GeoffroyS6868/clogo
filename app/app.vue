@@ -12,8 +12,8 @@ useHead({
 })
 
 useSeoMeta({
-  title: 'Clogo',
-  description: 'Créez un logo en répliquant une forme en rond ou en carré, puis exportez-le en SVG ou en PNG.'
+  title: 'c-logo',
+  description: 'Créez un logo en répliquant une à trois formes en rond, en grille, en triangle ou en rayons, puis exportez-le en SVG ou en PNG.'
 })
 </script>
 

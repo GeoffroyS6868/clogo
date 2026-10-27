@@ -1,6 +1,6 @@
-# Clogo
+# c-logo
 
-Un créateur de logo : on choisit une forme, elle est répliquée en rond ou en carré, on règle quelques curseurs, et on exporte le résultat en SVG ou en PNG.
+Un créateur de logo : on choisit une à trois formes, elles sont répliquées en rond, en grille, en triangle ou en rayons, on règle quelques curseurs et les couleurs, et on exporte le résultat en SVG ou en PNG.
 
 Les données restent dans le `localStorage` de votre navigateur, rien n'est envoyé.
 

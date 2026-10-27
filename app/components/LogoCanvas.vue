@@ -4,7 +4,10 @@ import type { Copy } from '~/utils/replicate'
 const props = defineProps<{ logo: Logo, ready: boolean }>()
 
 const replica = computed(() => replicate(props.logo))
-const d = computed(() => SHAPES[props.logo.shape].d)
+const paths = computed(() => props.logo.shapes.map(s => shapePath(s.id, props.logo.corner, props.logo.smooth)))
+
+// Own colour of a copy, or undefined to inherit currentColor from the group
+const colorOf = (c: Copy) => inkOf(props.logo, c.slot) ?? undefined
 
 // Indices already on screen: only a copy that is new after the first frame fades in
 const seen = new Set<number>()
@@ -26,13 +29,17 @@ const transform = (c: Copy) => `translate(${roundTo(c.x)}px, ${roundTo(c.y)}px) 
 
 <template>
   <div class="absolute inset-x-0 top-0 bottom-[calc(45dvh+1rem)] flex items-center justify-center [container-type:size] md:inset-y-0 md:right-76">
-    <div class="squircle aspect-square w-[calc(min(100cqw,100cqh)-4rem)] border border-default bg-elevated">
+    <div
+      data-surface
+      class="squircle aspect-square w-[calc(min(100cqw,100cqh)-4rem)] border border-default bg-elevated"
+      :style="{ backgroundColor: logo.background ?? undefined }"
+      :data-ready="ready ? '' : undefined"
+    >
       <svg
         viewBox="-500 -500 1000 1000"
         role="img"
         aria-label="Aperçu du logo"
         class="size-full text-highlighted"
-        :data-ready="ready ? '' : undefined"
       >
         <g
           data-fit
@@ -48,7 +55,11 @@ const transform = (c: Copy) => `translate(${roundTo(c.x)}px, ${roundTo(c.y)}px) 
             data-copy
             :style="{ transform: transform(copy) }"
           >
-            <path :d="d" />
+            <path
+              :d="paths[copy.slot]"
+              :fill="logo.paint === 'fill' ? colorOf(copy) : undefined"
+              :stroke="logo.paint === 'stroke' ? colorOf(copy) : undefined"
+            />
           </g>
         </g>
       </svg>
@@ -57,6 +68,14 @@ const transform = (c: Copy) => `translate(${roundTo(c.x)}px, ${roundTo(c.y)}px) 
 </template>
 
 <style scoped>
+[data-surface][data-ready] {
+  transition: background-color 0.2s;
+}
+
+[data-ready] path {
+  transition: fill 0.2s, stroke 0.2s;
+}
+
 [data-ready] [data-fit] {
   transition: transform 0.45s cubic-bezier(0.22, 1, 0.36, 1), stroke-width 0.45s cubic-bezier(0.22, 1, 0.36, 1);
 }
@@ -76,6 +95,8 @@ const transform = (c: Copy) => `translate(${roundTo(c.x)}px, ${roundTo(c.y)}px) 
 }
 
 @media (prefers-reduced-motion: reduce) {
+  [data-surface][data-ready],
+  [data-ready] path,
   [data-ready] [data-fit],
   [data-ready] [data-copy] {
     transition: none;

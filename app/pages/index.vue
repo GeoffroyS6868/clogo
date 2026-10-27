@@ -1,5 +1,5 @@
 <script setup lang="ts">
-const { logo, ready, patch, reset, shuffle } = useLogo()
+const { logo, ready, patch, toggleShape, setColor, reset, shuffle } = useLogo()
 </script>
 
 <template>
@@ -11,6 +11,8 @@ const { logo, ready, patch, reset, shuffle } = useLogo()
     <LogoControls
       :logo="logo"
       @patch="patch"
+      @toggle-shape="toggleShape"
+      @set-color="setColor"
       @shuffle="shuffle"
       @reset="reset"
     />

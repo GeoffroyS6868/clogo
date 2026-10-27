@@ -11,7 +11,7 @@ FROM base AS deps
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc* ./
 
 # postinstall runs `nuxt prepare`, which needs the sources: scripts run in the build stage
-RUN --mount=type=cache,target=/pnpm/store,id=pnpm-store-clogo \
+RUN --mount=type=cache,target=/pnpm/store,id=pnpm-store-c-logo \
     pnpm install --frozen-lockfile --store-dir=/pnpm/store --ignore-scripts
 
 FROM base AS build
@@ -19,7 +19,7 @@ FROM base AS build
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-RUN --mount=type=cache,target=/pnpm/store,id=pnpm-store-clogo \
+RUN --mount=type=cache,target=/pnpm/store,id=pnpm-store-c-logo \
     pnpm install --frozen-lockfile --store-dir=/pnpm/store
 
 ARG APP_RELEASE=unknown

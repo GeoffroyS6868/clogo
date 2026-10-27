@@ -6,11 +6,12 @@ function save(blob: Blob, name: string) {
   a.href = url
   a.download = name
   a.click()
-  URL.revokeObjectURL(url)
+  // Next tick: revoking right away can cancel the download
+  setTimeout(() => URL.revokeObjectURL(url), 0)
 }
 
 export function downloadSvg(logo: Logo) {
-  save(new Blob([toSvg(logo)], { type: 'image/svg+xml' }), 'clogo.svg')
+  save(new Blob([toSvg(logo)], { type: 'image/svg+xml' }), 'c-logo.svg')
 }
 
 export async function downloadPng(logo: Logo) {
@@ -27,7 +28,7 @@ export async function downloadPng(logo: Logo) {
     canvas.height = PNG_SIZE
     canvas.getContext('2d')?.drawImage(img, 0, 0, PNG_SIZE, PNG_SIZE)
     const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/png'))
-    if (blob) save(blob, 'clogo.png')
+    if (blob) save(blob, 'c-logo.png')
   } finally {
     URL.revokeObjectURL(url)
   }
