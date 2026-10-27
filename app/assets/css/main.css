@@ -4,3 +4,12 @@
 @theme static {
   --font-sans: 'Public Sans', sans-serif;
 }
+
+@utility squircle {
+  border-radius: 1.25rem;
+
+  @supports (corner-shape: squircle) {
+    border-radius: 2rem;
+    corner-shape: squircle;
+  }
+}
