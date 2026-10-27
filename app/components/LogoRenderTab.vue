@@ -4,6 +4,12 @@ const emit = defineEmits<{
   patch: [changes: Partial<Logo>]
   setColor: [slot: number, color: string | null]
 }>()
+
+const FILTER_BUTTONS = [
+  { id: 'none', label: 'Aucun', icon: 'i-lucide-circle-off' },
+  { id: 'pixel', label: 'Pixels', icon: 'i-lucide-grid-2x2' },
+  { id: 'hex', label: 'Hexagones', icon: 'i-lucide-hexagon' }
+] as const
 </script>
 
 <template>
@@ -64,6 +70,46 @@ const emit = defineEmits<{
           />
         </li>
       </ul>
+    </section>
+
+    <section class="flex flex-col gap-2">
+      <h2 class="text-xs text-muted">
+        Filtre
+      </h2>
+      <div
+        role="group"
+        aria-label="Filtre"
+        class="flex gap-1"
+      >
+        <UButton
+          v-for="filter in FILTER_BUTTONS"
+          :key="filter.id"
+          color="neutral"
+          size="xs"
+          :variant="logo.filter === filter.id ? 'soft' : 'ghost'"
+          :icon="filter.icon"
+          :label="filter.label"
+          :aria-pressed="logo.filter === filter.id"
+          class="flex-auto justify-center"
+          @click="emit('patch', { filter: filter.id })"
+        />
+      </div>
+      <template v-if="logo.filter !== 'none'">
+        <LogoSlider
+          label="Résolution"
+          :text="logo.filter === 'pixel' ? `${logo.cells} × ${logo.cells}` : String(logo.cells)"
+          v-bind="LOGO_LIMITS.cells"
+          :model-value="logo.cells"
+          @update:model-value="emit('patch', { cells: $event })"
+        />
+        <LogoSlider
+          label="Espacement"
+          :text="`${Math.round(logo.gap * 100)} %`"
+          v-bind="LOGO_LIMITS.gap"
+          :model-value="logo.gap"
+          @update:model-value="emit('patch', { gap: $event })"
+        />
+      </template>
     </section>
   </div>
 </template>

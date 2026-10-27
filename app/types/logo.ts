@@ -1,6 +1,7 @@
 export type ShapeId = 'circle' | 'square' | 'triangle' | 'diamond' | 'petal' | 'bar' | 'arc' | 'star'
 export type Layout = 'circle' | 'grid' | 'triangle' | 'rays'
 export type Paint = 'fill' | 'stroke'
+export type Filter = 'none' | 'pixel' | 'hex'
 
 export interface ShapeSlot {
   id: ShapeId
@@ -25,4 +26,9 @@ export interface Logo {
   smooth: boolean
   // '#rrggbb', null = transparent
   background: string | null
+  filter: Filter
+  // Cells across the frame
+  cells: number
+  // Space between cells, as a fraction of a cell
+  gap: number
 }

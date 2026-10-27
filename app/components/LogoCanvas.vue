@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { Mosaic } from '~/utils/mosaic'
 import type { Copy } from '~/utils/replicate'
 
 const props = defineProps<{ logo: Logo, ready: boolean }>()
@@ -24,6 +25,37 @@ watch(() => replica.value.copies.length, (count) => {
   for (const i of seen) if (i >= count) seen.delete(i)
 })
 
+// Cells of the filter. One raster pass is costly: at most one pass per frame, client side only.
+const tiles = shallowRef<Mosaic | null>(null)
+let frame = 0
+let stop: (() => void) | undefined
+
+function compute() {
+  frame = 0
+  tiles.value = mosaic(props.logo, rasterSampler(props.logo, replica.value))
+}
+
+// A change within the same frame joins the pass already scheduled
+function schedule() {
+  if (props.logo.filter === 'none') {
+    cancelAnimationFrame(frame)
+    frame = 0
+    tiles.value = null
+  } else if (!frame) {
+    frame = requestAnimationFrame(compute)
+  }
+}
+
+onMounted(() => {
+  schedule()
+  stop = watch(() => props.logo, schedule)
+})
+
+onBeforeUnmount(() => {
+  stop?.()
+  cancelAnimationFrame(frame)
+})
+
 const transform = (c: Copy) => `translate(${roundTo(c.x)}px, ${roundTo(c.y)}px) rotate(${roundTo(c.angle)}deg) scale(${roundTo(c.k, 4)})`
 </script>
 
@@ -42,6 +74,7 @@ const transform = (c: Copy) => `translate(${roundTo(c.x)}px, ${roundTo(c.y)}px) 
         class="size-full text-highlighted"
       >
         <g
+          v-if="logo.filter === 'none'"
           data-fit
           :fill="logo.paint === 'fill' ? 'currentColor' : 'none'"
           :stroke="logo.paint === 'stroke' ? 'currentColor' : 'none'"
@@ -61,6 +94,17 @@ const transform = (c: Copy) => `translate(${roundTo(c.x)}px, ${roundTo(c.y)}px) 
               :stroke="logo.paint === 'stroke' ? colorOf(copy) : undefined"
             />
           </g>
+        </g>
+        <g
+          v-else-if="tiles"
+          fill="currentColor"
+        >
+          <path
+            v-for="tile in tiles.paths"
+            :key="tile.slot"
+            :d="tile.d"
+            :fill="inkOf(logo, tile.slot) ?? undefined"
+          />
         </g>
       </svg>
     </div>

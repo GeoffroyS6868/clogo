@@ -49,7 +49,10 @@ function parse(data: unknown): Logo {
     paint: v.paint === 'fill' || v.paint === 'stroke' ? v.paint : d.paint,
     corner: num(v.corner, d.corner, limits.corner),
     smooth: typeof v.smooth === 'boolean' ? v.smooth : d.smooth,
-    background: color(v.background) ?? d.background
+    background: color(v.background) ?? d.background,
+    filter: v.filter === 'none' || v.filter === 'pixel' || v.filter === 'hex' ? v.filter : d.filter,
+    cells: num(v.cells, d.cells, limits.cells, true),
+    gap: num(v.gap, d.gap, limits.gap)
   }
 }
 
@@ -112,14 +115,17 @@ export function useLogo() {
     set(structuredClone(DEFAULT_LOGO))
   }
 
-  // The dice explore the geometry: the user's colours stay
+  // The dice explore the geometry: the user's colours and filter stay
   function shuffle() {
-    const { shapes, background } = logo.value
+    const { shapes, background, filter, cells, gap } = logo.value
     const next = randomLogo()
     set({
       ...next,
       shapes: next.shapes.map((s, i) => ({ ...s, color: shapes[i]?.color ?? null })),
-      background
+      background,
+      filter,
+      cells,
+      gap
     })
   }
 

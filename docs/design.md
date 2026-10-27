@@ -1,6 +1,6 @@
 # c-logo — conception
 
-Créateur de logo : on choisit une à trois formes, elles sont répliquées selon une disposition (rond, grille, triangle ou rayons), on règle quelques curseurs et les couleurs, et on exporte le logo en SVG ou en PNG.
+Créateur de logo : on choisit une à trois formes, elles sont répliquées selon une disposition (rond, grille, triangle ou rayons), on règle quelques curseurs et les couleurs, on peut passer le tout au filtre pixels ou hexagones, et on exporte le logo en SVG ou en PNG.
 
 ## Principes
 
@@ -8,10 +8,10 @@ Créateur de logo : on choisit une à trois formes, elles sont répliquées selo
 - **L'interface** est monochrome noir/blanc : couleurs uniquement via les tokens Nuxt UI (`bg-default`, `bg-elevated`, `text-highlighted`, `text-muted`, `border-default`…). Clair et sombre suivent le système. **Le logo**, lui, peut avoir ses propres couleurs (voir Couleurs) ; sans couleur choisie, il est dessiné en `currentColor`.
 - Composants Nuxt UI autorisés : `UApp` (racine), `UButton`, `USlider`. Rien d'autre. Les couleurs passent par l'`<input type="color">` natif.
 - Données 100 % locales (`localStorage`), rien n'est envoyé.
-- La géométrie est une **fonction pure de la configuration** : l'écran et l'export lisent le même résultat, il n'y a pas d'état caché dans le DOM.
+- La géométrie est une **fonction pure de la configuration** : l'écran et l'export lisent le même résultat, il n'y a pas d'état caché dans le DOM. (Le filtre a besoin de savoir si un point est dans un chemin : ce test lui est passé en paramètre, la fonction reste pure.)
 - **Ajouter sans surcharger** :
   1. un réglage n'apparaît que s'il a un effet (« Arrondi » seulement avec une forme à angles, « Branches » seulement en rayons…) ;
-  2. le panneau est découpé en trois onglets courts (Forme, Disposition, Couleur), l'en-tête et l'export restent toujours visibles ;
+  2. le panneau est découpé en trois onglets courts (Forme, Disposition, Rendu), l'en-tête et l'export restent toujours visibles ;
   3. une variante d'un réglage existant vaut mieux qu'un nouveau réglage (la croix est une étoile à 4 branches, pas une disposition de plus).
 
 ## Modèle
@@ -20,6 +20,7 @@ Créateur de logo : on choisit une à trois formes, elles sont répliquées selo
 type ShapeId = 'circle' | 'square' | 'triangle' | 'diamond' | 'petal' | 'bar' | 'arc' | 'star'
 type Layout = 'circle' | 'grid' | 'triangle' | 'rays'
 type Paint = 'fill' | 'stroke'
+type Filter = 'none' | 'pixel' | 'hex'
 
 interface ShapeSlot {
   id: ShapeId
@@ -42,6 +43,9 @@ interface Logo {
   corner: number        // 0–1 : arrondi des angles
   smooth: boolean       // coins lissés (squircle) plutôt que circulaires
   background: string | null // '#rrggbb', null = transparent
+  filter: Filter        // aucun, pixels ou hexagones
+  cells: number         // 8–64 : cellules sur la largeur du cadre
+  gap: number           // 0–0.5 : espacement entre cellules (fraction de la cellule)
 }
 ```
 
@@ -54,7 +58,8 @@ Défaut : une fleur.
   shapes: [{ id: 'petal', color: null }], layout: 'circle',
   circleCount: 8, gridSize: 3, triangleRows: 3, rayCount: 6, rayLength: 3,
   spread: 0.6, size: 0.5, rotation: 0, twist: 0,
-  paint: 'fill', corner: 0, smooth: false, background: null
+  paint: 'fill', corner: 0, smooth: false, background: null,
+  filter: 'none', cells: 24, gap: 0
 }
 ```
 
@@ -191,7 +196,7 @@ Tout le logo est dans un groupe `scale(fit)`.
 - rotation et torsion arrondies à 5°, `twist` nul une fois sur trois ;
 - `paint` : `stroke` une fois sur quatre ; `corner` nul une fois sur deux, sinon dans `[0.2, 1]` ; `smooth` une fois sur deux.
 
-Les couleurs ne sont pas tirées : `randomLogo` renvoie `color: null` et `background: null`, et `shuffle()` (dans `useLogo`) **garde les couleurs choisies** — fond inchangé, la forme n° *i* reprend la couleur de l'ancienne forme n° *i*. Ce sont les couleurs de la marque, l'aléatoire explore la géométrie.
+Le rendu n'est pas tiré : `randomLogo` renvoie `color: null`, `background: null` et le filtre par défaut, et `shuffle()` (dans `useLogo`) **garde le rendu choisi** — fond et filtre (`filter`, `cells`, `gap`) inchangés, la forme n° *i* reprend la couleur de l'ancienne forme n° *i*. Ce sont les choix de la marque, l'aléatoire explore la géométrie.
 
 ## Couleurs
 
@@ -201,6 +206,40 @@ Les couleurs ne sont pas tirées : `randomLogo` renvoie `color: null` et `backgr
   - avec un fond : noir ou blanc, celui qui contraste le plus avec le fond (luminance relative du fond > 0,18 → noir), écrit en dur dans l'aperçu comme dans l'export. Sinon un fond clair en thème sombre donnerait des formes blanches à l'écran et noires à l'export. `inkOf(logo, slot)` dans `replicate.ts` donne cette couleur.
 - L'aperçu est le résultat exact : ce qu'on voit sur le plan de travail est ce qui sera exporté (hors coins arrondis du plan de travail).
 - En plein, la couleur est le `fill` de la copie ; en contour, son `stroke`.
+
+## Filtre : pixels et hexagones
+
+Le filtre repasse le logo sur une trame : le cadre est découpé en cellules (carrées ou hexagonales), et chaque cellule est **pleine** de la couleur du logo à cet endroit, ou **vide**. Le résultat reste vectoriel : des carrés ou des hexagones nets, exportés en SVG.
+
+`app/utils/mosaic.ts`, pur :
+
+```ts
+type Sampler = (x: number, y: number) => number | null  // repère du logo → slot de la forme visible là, ou rien
+interface Mosaic { paths: { slot: number, d: string }[] } // un chemin par forme : toutes ses cellules
+function mosaic(logo: Logo, sample: Sampler): Mosaic
+```
+
+`app/utils/raster.ts` (DOM) : `rasterSampler(logo, replica): Sampler`. Le logo est **dessiné une seule fois** sur un canvas caché, puis lu d'un bloc ; chaque point n'est plus qu'une lecture de tableau. Le coût ne dépend ni du nombre de copies ni de la peinture.
+
+- Canvas `S × S`, `S = min(1024, 8 · cells)` (8 pixels par cellule : assez fin pour 4 points par cellule), contexte `getContext('2d', { willReadFrequently: true })`, réutilisé d'un appel à l'autre.
+- Repère : `setTransform(S/1000, 0, 0, S/1000, S/2, S/2)` puis `scale(fit)` ; pour chaque copie, dans l'ordre (la dernière dessinée est au-dessus) : `translate(x, y)`, `rotate(angle)`, `scale(k)`, puis `fill(Path2D)` ou `stroke(Path2D)` (`lineWidth = strokeWidth`, `lineJoin = 'round'`).
+- Couleur de dessin = identifiant de la forme : `rgb(slot + 1, 0, 0)`, opaque.
+- `getImageData` une fois. Lecture d'un point : pixel `⌊(x + 500) · S / 1000⌋`, `⌊(y + 500) · S / 1000⌋` (borné au canvas) ; alpha < 128 → `null` ; sinon `slot = round(rouge) − 1`, borné à `[0, m − 1]` (les bords anticrénelés entre deux formes tombent sur l'une ou l'autre).
+
+Ancienne approche abandonnée : tester chaque point avec `isPointInPath` / `isPointInStroke` copie par copie. En contour, à 64 cellules et 24 copies, un recalcul prenait ~200 ms (curseur à 5 images/s) ; `isPointInStroke` est lent.
+
+**Trame** (repère du logo, centrée sur l'origine pour que la trame d'un logo symétrique le soit aussi) :
+
+- **Pixels** (`N = cells`) : `c = 1000 / N`, centres `(−500 + c·(i + ½), −500 + c·(j + ½))`, `i, j ∈ [0, N)`. Cellule dessinée : carré de côté `a = c · (1 − gap)` centré, `M x−a/2 y−a/2 h a v a h −a Z`.
+- **Hexagones** (pointe en haut) : pas horizontal `w = 1000 / N`, rayon `R = w / √3`, pas vertical `1,5 · R`. Centres `x = (i + (j impair ? ½ : 0)) · w`, `y = j · 1,5 · R`, pour tous les entiers `i, j` tels que la cellule touche le cadre (`|x| ≤ 500 + w`, `|y| ≤ 500 + R`) : une cellule est centrée sur l'origine. Cellule dessinée : hexagone de rayon `R · (1 − gap)`, sommets à `−90° + 60°·k`. Le `viewBox` coupe les cellules du bord, à l'écran comme à l'export.
+
+**Échantillonnage.** Chaque cellule est testée en 4 points, aux décalages `(±q, ±q)` de son centre, `q = c/4` (pixels) ou `w/4` (hexagones). La cellule est pleine si **au moins 1 point sur 4** touche le logo. Les points d'une cellule et de ses voisines forment un réseau de pas `c/2` : une forme large d'au moins `0,71 · c` en touche toujours un, donc rien ne disparaît en basse résolution ni sur un trait fin. (Avec 2 points sur 4, c'est-à-dire environ la moitié de la cellule couverte, une grille 2 × 2 de carrés sur 8 cellules disparaissait entièrement.) Le revers : la forme grossit d'au plus un quart de cellule. Sa forme (`slot`) est celle qui a le plus de points ; à égalité, la plus petite.
+
+En contour, ce sont les traits qui sont tramés ; les cellules, elles, sont toujours pleines.
+
+**Couleur.** Une cellule prend la couleur de sa forme (`inkOf`) ; sans couleur, elle hérite de `currentColor`, comme les copies.
+
+**Coût.** Un dessin du logo (au pire 512 × 512) et une lecture de pixels, puis au pire ~20 000 lectures de tableau. Le calcul se fait côté client uniquement, au plus une fois par frame (voir Mouvement).
 
 ## Export
 
@@ -219,11 +258,22 @@ Les couleurs ne sont pas tirées : `randomLogo` renvoie `color: null` et `backgr
 
 Le chemin de chaque forme est calculé une fois (`shapePath`) et répété. Positions, angles et épaisseur arrondis à 2 décimales ; échelles (`k`, `fit`) à 4.
 
-`app/utils/download.ts` :
+**Avec un filtre** : `toSvg(logo, tiles?: Mosaic)`. Si `logo.filter !== 'none'` et qu'une mosaïque est fournie, le groupe des copies est remplacé par un chemin par forme (coordonnées arrondies à 2 décimales) :
+
+```xml
+  <g fill="currentColor">
+    <path d="M… Z M… Z …"/>              <!-- forme sans couleur -->
+    <path d="M… Z …" fill="#…"/>         <!-- forme avec couleur (inkOf) -->
+  </g>
+```
+
+`toSvg` reste pur : c'est l'appelant qui calcule la mosaïque.
+
+`app/utils/download.ts` (chacun calcule la mosaïque avec `rasterSampler()` si un filtre est actif) :
 
 - `downloadSvg(logo)` → `c-logo.svg` (Blob `image/svg+xml`, lien `<a download>` temporaire ; `URL.revokeObjectURL` au tour suivant, `setTimeout(…, 0)`, pour ne pas couper le téléchargement).
 - `downloadPng(logo)` → `c-logo.png`, 1024 × 1024 : SVG chargé dans une `Image` via une URL de Blob, dessiné sur un `canvas`, `canvas.toBlob`. Fond transparent sauf si `background`. Les formes sans couleur sont noires.
-- `copySvg(logo)` → `navigator.clipboard.writeText(toSvg(logo))`.
+- `copySvg(logo)` → `navigator.clipboard.writeText(toSvg(logo, …))`.
 
 ## Écran
 
@@ -238,7 +288,7 @@ Le chemin de chaque forme est calculé une fois (`shapePath`) et répété. Posi
 `bg-default border border-default rounded-3xl p-4`, colonne, `gap-4`. De haut en bas :
 
 1. **En-tête** (fixe) : « c-logo » (`h1`, `text-sm font-medium text-highlighted`) ; à droite deux `UButton` icône seule, `color="neutral" variant="ghost" size="sm"` : `i-lucide-shuffle` « Aléatoire », `i-lucide-rotate-ccw` « Réinitialiser ».
-2. **Onglets** (fixe) : trois `UButton` côte à côte, `size="sm"`, `color="neutral"`, actif `variant="soft"`, sinon `ghost` : « Forme », « Disposition », « Couleur ». `role="tablist"` (`aria-label` « Sections ») / `role="tab"` / `aria-selected`, flèches gauche/droite pour passer d'un onglet à l'autre. L'onglet actif est un `ref` local (Forme au départ).
+2. **Onglets** (fixe) : trois `UButton` côte à côte, `size="sm"`, `color="neutral"`, actif `variant="soft"`, sinon `ghost` : « Forme », « Disposition », « Rendu » (largeur selon le texte, `flex-auto`, rien n'est coupé). `role="tablist"` (`aria-label` « Sections ») / `role="tab"` / `aria-selected`, flèches gauche/droite pour passer d'un onglet à l'autre. L'onglet actif est un `ref` local (Forme au départ).
 3. **Contenu de l'onglet** (`role="tabpanel"`, `flex-1 overflow-y-auto`) — détaillé ci-dessous.
 4. **Export** (fixe, en bas) : `UButton` `color="neutral" variant="solid"` `i-lucide-download` « SVG », idem « PNG », et un bouton icône `variant="ghost"` `i-lucide-copy` « Copier le SVG » qui devient `i-lucide-check` pendant 1,5 s.
 
@@ -267,13 +317,17 @@ Curseurs : `USlider`, `color="neutral"`, `size="sm"`, avec une ligne au-dessus :
 - **Écart** (`spread`, 0–1, pas 0.01, en %).
 - **Torsion** (`twist`, −180–180, pas 1, en °).
 
-**Onglet Couleur**
+**Onglet Rendu** (trois sections titrées `text-xs text-muted` : Fond, Formes, Filtre)
 
 - **Fond** : une pastille, et à côté un bouton « Transparent » (`i-lucide-ban`, `size="xs"`, à bascule, actif quand `background` est `null`).
 - **Formes** : une ligne par forme choisie : son mini SVG, son label, sa pastille, et un bouton « Auto » (`size="xs"`, à bascule, actif quand `color` est `null`).
 - **Pastille** : un `<label>` rond `size-7 rounded-full border border-default`, rempli de la couleur, qui contient un `<input type="color">` visuellement caché (`sr-only`) ; `aria-label` « Couleur du fond » / « Couleur de <label> ». Une couleur `null` est montrée par une pastille vide barrée en diagonale (`text-muted`). Choisir une couleur (événement `input`, en direct) la fixe ; la valeur initiale du sélecteur pour une couleur `null` est `#000000`.
 
 Les boutons « Transparent » / « Auto » remettent `null` ; cliqués quand ils sont déjà actifs, ils ne font rien (on fixe une couleur avec la pastille).
+
+- **Filtre** : trois boutons à bascule, `size="xs"` (en `sm`, icône comprise, ils dépassent des 254 px utiles du panneau), largeur selon le texte (`flex-auto`) : « Aucun » (`i-lucide-circle-off`), « Pixels » (`i-lucide-grid-2x2`), « Hexagones » (`i-lucide-hexagon`). Avec un filtre actif, en dessous :
+  - « Résolution » (`cells`, 8–64, pas 1 ; affichée « 24 × 24 » en pixels, « 24 » en hexagones) ;
+  - « Espacement » (`gap`, 0–0.5, pas 0.01, en %).
 
 ## Mouvement
 
@@ -293,20 +347,24 @@ Le groupe de cadrage (`scale(fit)`) a la même transition, sur `transform` et `s
 - **Premier rendu** : les transitions ne sont activées (`data-ready` sur le plan de travail) qu'un `requestAnimationFrame` après la lecture du `localStorage` (état `ready` de `useLogo()`), pour ne pas voir le logo par défaut se transformer en logo sauvegardé.
 - `prefers-reduced-motion` : aucune transition, aucun fondu.
 
+**Avec un filtre**, le plan de travail affiche la mosaïque à la place des copies (le groupe des copies n'est pas rendu). La mosaïque est un `shallowRef` recalculé côté client quand le logo change, **au plus une fois par frame** (le changement programme un `requestAnimationFrame`, les changements suivants dans la même frame s'y rattachent). Les cellules n'ont pas de transition de position : elles changent d'une frame à l'autre, ce qui donne un mouvement « pixel art » pendant qu'on fait glisser un curseur. La transition de couleur (`fill 0.2s`) s'applique. Activer ou couper le filtre : remplacement immédiat. Tant que la première mosaïque n'est pas calculée (premier rendu), rien n'est affiché à la place.
+
 ## Fichiers
 
 | Fichier | Rôle |
 |---|---|
-| `app/types/logo.ts` | types `ShapeId`, `Layout`, `Paint`, `ShapeSlot`, `Logo` |
+| `app/types/logo.ts` | types `ShapeId`, `Layout`, `Paint`, `Filter`, `ShapeSlot`, `Logo` |
 | `app/utils/shapes.ts` | `SHAPES`, `SHAPE_IDS`, `isAngular`, `shapePath` (arrondi) — pur |
 | `app/utils/replicate.ts` | `replicate(logo)`, `toSvg(logo)`, `randomLogo(rand)`, `DEFAULT_LOGO`, `LOGO_LIMITS`, `LAYOUTS`, `MAX_SHAPES`, `COLOR_PATTERN`, `minCircleCount(m)`, `snapCircleCount(n, m)`, `roundTo` — pur |
-| `app/utils/download.ts` | `downloadSvg`, `downloadPng`, `copySvg` |
+| `app/utils/mosaic.ts` | `mosaic(logo, sample)`, types `Sampler`, `Mosaic` — pur |
+| `app/utils/raster.ts` | `rasterSampler(logo, replica)` : dessine le logo sur un canvas caché et lit ses pixels |
+| `app/utils/download.ts` | `downloadSvg`, `downloadPng`, `copySvg` (mosaïque comprise) |
 | `app/composables/useLogo.ts` | état, `ready`, lecture / validation / écriture `localStorage`, `patch(changes)`, `toggleShape(id)`, `setColor(slot, color)`, `reset()`, `shuffle()` (garde les couleurs) |
-| `app/components/LogoCanvas.vue` | plan de travail, SVG animé à partir de `replicate()` |
+| `app/components/LogoCanvas.vue` | plan de travail, SVG animé à partir de `replicate()`, ou mosaïque si un filtre est actif |
 | `app/components/LogoControls.vue` | panneau : en-tête, onglets, export |
 | `app/components/LogoShapeTab.vue` | onglet Forme |
 | `app/components/LogoLayoutTab.vue` | onglet Disposition |
-| `app/components/LogoColorTab.vue` | onglet Couleur |
+| `app/components/LogoRenderTab.vue` | onglet Rendu : couleurs et filtre (remplace `LogoColorTab.vue`) |
 | `app/components/LogoSlider.vue` | une ligne libellé + valeur + `USlider` (partagée par les onglets) |
 | `app/components/ColorSwatch.vue` | pastille + `<input type="color">` caché |
 | `app/pages/index.vue` | assemble le plan de travail et le panneau |
