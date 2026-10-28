@@ -1,7 +1,8 @@
 import type { Replica } from '~/utils/replicate'
 import type { Sampler } from '~/utils/mosaic'
 
-// Pixels per cell: enough for the four sample points of a cell
+// Pixels per cell. Four is enough to separate the sample points, but anti-aliased edges and thin outlines
+// then fall under MIN_ALPHA and cells go missing (half of them differ in mixed logos): eight keeps them
 const PIXELS_PER_CELL = 8
 const MAX_SIDE = 1024
 // Drawn alpha below this counts as empty (anti-aliased edges)
@@ -36,7 +37,9 @@ export function rasterSampler(logo: Logo, replica: Replica): Sampler {
   const paths = logo.shapes.map(s => new Path2D(shapePath(s, logo.corner, logo.smooth)))
   const stroke = logo.paint === 'stroke'
   const unit = side / 1000
-  ctx.setTransform(unit, 0, 0, unit, side / 2, side / 2)
+  // Drawn half a pixel down and right: a point at x then sits at the centre of pixel round(x), the one the sampler reads.
+  // Without it the cell centres fall on pixel edges, and rounding (or 3.9999 for 4) tips them onto a neighbour: mosaics lean
+  ctx.setTransform(unit, 0, 0, unit, side / 2 + 0.5, side / 2 + 0.5)
   ctx.scale(replica.fit, replica.fit)
   ctx.lineWidth = replica.strokeWidth
   ctx.lineJoin = 'miter'
@@ -59,7 +62,7 @@ export function rasterSampler(logo: Logo, replica: Replica): Sampler {
   }
   const { data } = ctx.getImageData(0, 0, side, side)
   const last = logo.shapes.length - 1
-  const pixel = (v: number) => Math.min(side - 1, Math.max(0, Math.floor((v + 500) * unit)))
+  const pixel = (v: number) => Math.min(side - 1, Math.max(0, Math.round((v + 500) * unit)))
 
   return (x, y) => {
     const at = (pixel(y) * side + pixel(x)) * 4
