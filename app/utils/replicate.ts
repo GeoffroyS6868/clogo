@@ -28,6 +28,7 @@ export const DEFAULT_LOGO: Logo = {
   size: 0.5,
   rotation: 0,
   twist: 0,
+  scale: 1,
   paint: 'fill',
   corner: 0,
   smooth: false,
@@ -47,6 +48,7 @@ export const LOGO_LIMITS = {
   size: { min: 0.1, max: 1, step: 0.01 },
   rotation: { min: 0, max: 360, step: 1 },
   twist: { min: -180, max: 180, step: 1 },
+  scale: { min: 0.5, max: 1.5, step: 0.01 },
   corner: { min: 0, max: 1, step: 0.01 },
   cells: { min: 8, max: 64, step: 1 },
   gap: { min: 0, max: 0.5, step: 0.01 }
@@ -179,8 +181,10 @@ const LAYOUT_COPIES: Record<Layout, (logo: Logo) => Copy[]> = {
 
 export function replicate(logo: Logo): Replica {
   const copies = LAYOUT_COPIES[logo.layout](logo)
-  const extent = Math.max(...copies.map(c => Math.hypot(c.x, c.y) + shapeRadius(logo.shapes[c.slot]!) * c.k))
-  const fit = FIT_EXTENT / extent
+  const reach = logo.shapes.map(s => logo.paint === 'stroke' ? outlineRadius(s, STROKE, MITER_LIMIT) : shapeRadius(s))
+  const extent = Math.max(...copies.map(c => Math.hypot(c.x, c.y) + reach[c.slot]! * c.k))
+  // Fitted to the frame, then the user's scale: above 1 the logo is cropped by the frame on purpose
+  const fit = FIT_EXTENT / extent * logo.scale
   return { copies, fit, strokeWidth: STROKE }
 }
 
@@ -267,6 +271,7 @@ export function randomLogo(rand: () => number = Math.random): Logo {
     rotation: step(between(limits.rotation.min, limits.rotation.max), 5),
     // Often straight, to keep most logos calm
     twist: rand() < 1 / 3 ? 0 : step(between(limits.twist.min, limits.twist.max), 5),
+    scale: DEFAULT_LOGO.scale,
     paint: rand() < 0.25 ? 'stroke' : 'fill',
     // Often sharp, otherwise clearly rounded
     corner: rand() < 0.5 ? 0 : roundTo(between(0.2, 1)),

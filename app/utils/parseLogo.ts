@@ -64,6 +64,7 @@ export function parseLogo(data: unknown): Logo {
     size: num(v.size, d.size, limits.size),
     rotation: num(v.rotation, d.rotation, limits.rotation),
     twist: num(v.twist, d.twist, limits.twist),
+    scale: num(v.scale, d.scale, limits.scale),
     paint: v.paint === 'fill' || v.paint === 'stroke' ? v.paint : d.paint,
     corner: num(v.corner, d.corner, limits.corner),
     smooth: typeof v.smooth === 'boolean' ? v.smooth : d.smooth,

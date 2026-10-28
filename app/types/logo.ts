@@ -28,6 +28,8 @@ export interface Logo {
   size: number
   rotation: number
   twist: number
+  // Whole logo, on top of the automatic fit: above 1 the frame crops it
+  scale: number
   paint: Paint
   corner: number
   smooth: boolean

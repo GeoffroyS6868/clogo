@@ -94,6 +94,13 @@ const shapeCount = computed(() => props.logo.shapes.length)
         :model-value="logo.twist"
         @update:model-value="emit('patch', { twist: $event })"
       />
+      <LogoSlider
+        label="Échelle"
+        :text="`${Math.round(logo.scale * 100)} %`"
+        v-bind="LOGO_LIMITS.scale"
+        :model-value="logo.scale"
+        @update:model-value="emit('patch', { scale: $event })"
+      />
     </div>
   </div>
 </template>

@@ -145,6 +145,23 @@ export function shapeRadius(slot: ShapeSlot): number {
   return typeof radius === 'function' ? radius(slot) : radius
 }
 
+// How far the outline reaches once stroked with `width`: a sharp vertex pushes its miter out
+// by (width / 2) / sin(angle / 2), unless that passes the miter limit and the join is bevelled.
+// An upper bound (rounded corners reach less), so a stroked logo never spills out of its frame.
+export function outlineRadius(slot: ShapeSlot, width: number, miterLimit: number): number {
+  const half = width / 2
+  const points = slot.id === 'glyph' ? undefined : pointsOf(slot)
+  if (!points) return shapeRadius(slot) + half
+  const n = points.length
+  return Math.max(...points.map((p, i) => {
+    const a = sub(points[(i + n - 1) % n]!, p)
+    const b = sub(points[(i + 1) % n]!, p)
+    const cos = (a[0] * b[0] + a[1] * b[1]) / (Math.hypot(...a) * Math.hypot(...b))
+    const miter = 1 / Math.sin(Math.acos(Math.max(-1, Math.min(1, cos))) / 2)
+    return Math.hypot(...p) + half * (Number.isFinite(miter) && miter <= miterLimit ? miter : 1)
+  }))
+}
+
 // The vertices of an angular shape, or undefined; a count out of range is brought back to it
 function pointsOf(slot: ShapeSlot): Point[] | undefined {
   const { points } = SHAPES[slot.id]

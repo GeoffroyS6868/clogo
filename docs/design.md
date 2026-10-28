@@ -41,6 +41,7 @@ interface Logo {
   size: number          // 0.1–1 : taille de chaque forme
   rotation: number      // 0–360° : rotation de base de chaque forme
   twist: number         // −180–180° : rotation ajoutée de copie en copie
+  scale: number         // 0.5–1.5 : échelle de tout le logo, par-dessus le cadrage automatique
   paint: Paint          // plein ou contour
   corner: number        // 0–1 : arrondi des angles
   smooth: boolean       // coins lissés (squircle) plutôt que circulaires
@@ -207,7 +208,9 @@ extent = max_i ( hypot(x_i, y_i) + SHAPES[shapes[slot_i].id].radius · k_i )
 fit    = 430 / extent                      // marge de 70 sur un demi-côté de 500
 ```
 
-Tout le logo est dans un groupe `scale(fit)`.
+Tout le logo est dans un groupe `scale(fit)`, avec `fit = 430 / extent · scale` (`scale` : l’Échelle choisie, 1 par défaut).
+
+**En contour**, `extent` compte aussi le trait : au lieu du rayon de la forme, `outlineRadius(slot, 6, 8)` (`shapes.ts`), le point le plus éloigné du contour une fois tracé. À chaque sommet, la jointure pointue dépasse de `(épaisseur / 2) / sin(angle / 2)`, sauf au-delà de la limite d’onglet (8) où elle est biseautée (`épaisseur / 2`). C’est un majorant (un coin arrondi dépasse moins). Sans cela, les pointes d’une étoile en contour sortaient du cadre.
 
 **Contour.** En mode `stroke` : `fill="none"`, jointures pointues (`miter`, le défaut SVG, avec `stroke-miterlimit="8"` pour que les pointes de l’étoile restent pointues) : l’arrondi des coins ne vient que du réglage Arrondi, qui est dans le chemin. (Avant, `stroke-linejoin="round"` arrondissait les contours même à 0 %.) L'épaisseur est **proportionnelle à la forme** : `stroke-width = 6` dans le repère de la forme unité (6 % de sa boîte de 100), donc `6 · k · fit` à l'écran (`strokeWidth` dans `Replica`). Une petite copie a un trait fin, une grande un trait plus épais. (Avant, le trait faisait 14 unités du logo quelle que soit la taille des copies : sur de petites formes, il remplissait tout l'intérieur et le contour avait l'air plein.) Elle est posée une seule fois sur le groupe de cadrage et hérite jusqu'aux chemins (la valeur s'applique dans le repère de chaque chemin, après son `scale(k)`). Pas de `vector-effect`.
 
@@ -404,6 +407,7 @@ Boutons à bascule : même logique actif/inactif que les onglets, avec `aria-pre
   - Rayons : « Branches » (`rayCount`, 2–12 ; la valeur affiche « 4 · croix » quand elle vaut 4) et « Longueur » (`rayLength`, 1–6).
 - **Écart** (`spread`, pas 0.01, en %) : 0–100 % en Rond, **10–100 % en Grille, Triangle et Rayons**. À 0 %, toutes les copies sont au centre : en Rond, c’est une rosace ; ailleurs, des copies identiques empilées, et toutes les dispositions donnent la même image (on croit alors que les boutons de disposition ne marchent plus). La valeur enregistrée n’est pas modifiée : la géométrie et la barre utilisent `spreadOf(logo) = max(spread, minSpread(layout))`, si bien qu’en revenant en Rond, une rosace à 0 % le reste.
 - **Torsion** (`twist`, −180–180, pas 1, en °).
+- **Échelle** (`scale`, 50–150 %, pas 0.01, défaut 100 %) : agrandit ou rapetisse tout le logo, par-dessus le cadrage automatique. Au-delà de 100 %, le cadre coupe le logo (voulu : motif qui déborde). Gardée par l’aléatoire, comme le rendu.
 
 **Onglet Rendu** (trois sections titrées `text-xs text-muted` : Fond, Formes, Filtre)
 

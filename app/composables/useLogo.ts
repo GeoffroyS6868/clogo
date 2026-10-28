@@ -106,11 +106,12 @@ export function useLogo() {
 
   // The dice explore the geometry: the user's colours and filter stay
   function shuffle() {
-    const { shapes, background, filter, cells, gap } = logo.value
+    const { shapes, scale, background, filter, cells, gap } = logo.value
     const next = randomLogo()
     set({
       ...next,
       shapes: next.shapes.map((s, i) => ({ ...s, color: shapes[i]?.color ?? null })),
+      scale,
       background,
       filter,
       cells,
