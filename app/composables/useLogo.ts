@@ -62,13 +62,18 @@ export function useLogo() {
       if (shapes.length === 1) return
       next = shapes.filter(s => s.id !== id)
     } else {
-      next = [...shapes, { id, color: null }].slice(-MAX_SHAPES)
+      next = [...shapes, newSlot(id)].slice(-MAX_SHAPES)
     }
     set({ ...logo.value, shapes: next, circleCount: snapCircleCount(logo.value.circleCount, next.length) })
   }
 
+  // A setting of one shape (colour, count, character): dragging a bar is a single step, like patch
+  function setShape(slot: number, changes: ShapeChanges) {
+    patch({ shapes: logo.value.shapes.map((s, i) => i === slot ? { ...s, ...changes } : s) })
+  }
+
   function setColor(slot: number, color: string | null) {
-    patch({ shapes: logo.value.shapes.map((s, i) => i === slot ? { ...s, color } : s) })
+    setShape(slot, { color })
   }
 
   // Back to an earlier or later state: the next change starts a new step
@@ -113,5 +118,5 @@ export function useLogo() {
     })
   }
 
-  return { logo, ready, canUndo, canRedo, patch, toggleShape, setColor, load, shuffle, undo, redo }
+  return { logo, ready, canUndo, canRedo, patch, toggleShape, setColor, setShape, load, shuffle, undo, redo }
 }

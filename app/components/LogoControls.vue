@@ -12,6 +12,7 @@ const emit = defineEmits<{
   patch: [changes: Partial<Logo>]
   toggleShape: [id: ShapeId]
   setColor: [slot: number, color: string | null]
+  setShape: [slot: number, changes: ShapeChanges]
   undo: []
   redo: []
   shuffle: []
@@ -225,6 +226,7 @@ onBeforeUnmount(() => {
         :logo="logo"
         @patch="emit('patch', $event)"
         @toggle-shape="emit('toggleShape', $event)"
+        @set-shape="(slot, changes) => emit('setShape', slot, changes)"
       />
       <LogoLayoutTab
         v-else-if="tab === 'layout'"

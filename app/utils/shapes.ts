@@ -3,15 +3,66 @@ type Point = [number, number]
 interface Shape {
   label: string
   // Bounding circle from the origin, used to fit the logo in its frame
-  radius: number
-  // Angular shapes: vertices in clockwise order, in [-50, 50]² and pointing up
-  points?: Point[]
+  radius: number | ((slot: ShapeSlot) => number)
+  // Angular shapes: vertices in clockwise order, in [-50, 50]² and pointing up; computed from the count when adjustable
+  points?: Point[] | ((count: number) => Point[])
   // Curved shapes: fixed closed path, same box
   d?: string
 }
 
-const STAR_INNER = 9.9
+interface CountRule {
+  label: string
+  min: number
+  max: number
+  default: number
+}
 
+// The shapes with a count: what it is called, and its range
+export const SHAPE_COUNT: Partial<Record<ShapeId, CountRule>> = {
+  star: { label: 'Branches', min: 3, max: 12, default: 5 },
+  polygon: { label: 'Côtés', min: 3, max: 8, default: 3 },
+  cross: { label: 'Bras', min: 2, max: 8, default: 4 }
+}
+
+// Character of a new glyph shape, and the fallback for an unknown one
+export const DEFAULT_CHAR = 'A'
+
+const R = 50
+// Half-width of a cross arm
+const ARM = 12
+
+const polar = (angle: number, radius: number): Point => [radius * Math.cos(angle), radius * Math.sin(angle)]
+const turn = (k: number, of: number) => -Math.PI / 2 + k * 2 * Math.PI / of
+
+// Valleys of a star, as a fraction of the tips: the four-pointed star keeps its old, thin look,
+// then the classic five-pointed ratio, opening a little with the branches so that they stay readable
+const starValley = (n: number) => n <= 4 ? 0.28 : 0.382 + 0.02 * (n - 5)
+
+function starPoints(n: number): Point[] {
+  return Array.from({ length: 2 * n }, (_, k) => polar(-Math.PI / 2 + k * Math.PI / n, k % 2 ? R * starValley(n) : R))
+}
+
+function polygonPoints(n: number): Point[] {
+  return Array.from({ length: n }, (_, k) => polar(turn(k, n), R))
+}
+
+// Per arm, its two tips then the inner corner towards the next arm, on the bisector
+function crossPoints(n: number): Point[] {
+  const corner = ARM / Math.sin(Math.PI / n)
+  return Array.from({ length: n }, (_, k): Point[] => {
+    const theta = turn(k, n)
+    const [ux, uy] = polar(theta, 1)
+    // Normal to the right of the arm
+    const [vx, vy] = [-uy, ux]
+    return [
+      [R * ux - ARM * vx, R * uy - ARM * vy],
+      [R * ux + ARM * vx, R * uy + ARM * vy],
+      polar(theta + Math.PI / n, corner)
+    ]
+  }).flat()
+}
+
+// In the order of the buttons (5 per row)
 export const SHAPES: Record<ShapeId, Shape> = {
   circle: {
     label: 'Cercle',
@@ -23,15 +74,20 @@ export const SHAPES: Record<ShapeId, Shape> = {
     radius: Math.hypot(50, 50),
     points: [[-50, -50], [50, -50], [50, 50], [-50, 50]]
   },
-  triangle: {
-    label: 'Triangle',
-    radius: 50,
-    points: [[0, -50], [43.3, 25], [-43.3, 25]]
+  polygon: {
+    label: 'Polygone',
+    radius: R,
+    points: polygonPoints
   },
   diamond: {
     label: 'Losange',
     radius: 50,
     points: [[0, -50], [32, 0], [0, 50], [-32, 0]]
+  },
+  star: {
+    label: 'Étoile',
+    radius: R,
+    points: starPoints
   },
   petal: {
     label: 'Pétale',
@@ -50,13 +106,14 @@ export const SHAPES: Record<ShapeId, Shape> = {
     radius: Math.hypot(50, 25),
     d: 'M-50 25 A50 50 0 0 1 50 25 L26 25 A26 26 0 0 0 -26 25 Z'
   },
-  star: {
-    label: 'Étoile',
-    radius: 50,
-    points: [
-      [0, -50], [STAR_INNER, -STAR_INNER], [50, 0], [STAR_INNER, STAR_INNER],
-      [0, 50], [-STAR_INNER, STAR_INNER], [-50, 0], [-STAR_INNER, -STAR_INNER]
-    ]
+  cross: {
+    label: 'Croix',
+    radius: Math.hypot(R, ARM),
+    points: crossPoints
+  },
+  glyph: {
+    label: 'Caractère',
+    radius: slot => glyphOf(slot).radius
   }
 }
 
@@ -69,6 +126,33 @@ const SMOOTH_REACH = 1.5
 const SMOOTH_HANDLE = 0.82
 
 export const isAngular = (id: ShapeId) => SHAPES[id].points !== undefined
+
+// The glyph of a slot; an unknown character falls back to the default one
+const glyphOf = (slot: ShapeSlot) => GLYPHS[slot.char ?? ''] ?? GLYPHS[DEFAULT_CHAR]!
+
+export function newSlot(id: ShapeId): ShapeSlot {
+  const rule = SHAPE_COUNT[id]
+  return {
+    id,
+    color: null,
+    ...(rule && { count: rule.default }),
+    ...(id === 'glyph' && { char: DEFAULT_CHAR })
+  }
+}
+
+export function shapeRadius(slot: ShapeSlot): number {
+  const { radius } = SHAPES[slot.id]
+  return typeof radius === 'function' ? radius(slot) : radius
+}
+
+// The vertices of an angular shape, or undefined; a count out of range is brought back to it
+function pointsOf(slot: ShapeSlot): Point[] | undefined {
+  const { points } = SHAPES[slot.id]
+  if (typeof points !== 'function') return points
+  const rule = SHAPE_COUNT[slot.id]!
+  const count = Math.round(slot.count ?? rule.default)
+  return points(Math.min(rule.max, Math.max(rule.min, count)))
+}
 
 const sub = (a: Point, b: Point): Point => [a[0] - b[0], a[1] - b[1]]
 
@@ -108,9 +192,10 @@ function roundedCorner(a: Point, p: Point, b: Point, corner: number, smooth: boo
   return { p1, p2, c1: toward(p1, p, h), c2: toward(p2, p, h) }
 }
 
-export function shapePath(id: ShapeId, corner: number, smooth: boolean): string {
-  const { points, d } = SHAPES[id]
-  if (!points) return d ?? ''
+export function shapePath(slot: ShapeSlot, corner: number, smooth: boolean): string {
+  if (slot.id === 'glyph') return glyphOf(slot).d
+  const points = pointsOf(slot)
+  if (!points) return SHAPES[slot.id].d ?? ''
   const n = points.length
   const corners = points.map((p, i) => roundedCorner(points[(i + n - 1) % n]!, p, points[(i + 1) % n]!, corner, smooth))
   const last = corners[n - 1]

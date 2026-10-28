@@ -33,7 +33,7 @@ export function rasterSampler(logo: Logo, replica: Replica): Sampler {
     canvas.width = side
     canvas.height = side
   }
-  const paths = logo.shapes.map(s => new Path2D(shapePath(s.id, logo.corner, logo.smooth)))
+  const paths = logo.shapes.map(s => new Path2D(shapePath(s, logo.corner, logo.smooth)))
   const stroke = logo.paint === 'stroke'
   const unit = side / 1000
   ctx.setTransform(unit, 0, 0, unit, side / 2, side / 2)

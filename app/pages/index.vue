@@ -1,5 +1,5 @@
 <script setup lang="ts">
-const { logo, ready, canUndo, canRedo, patch, toggleShape, setColor, load, shuffle, undo, redo } = useLogo()
+const { logo, ready, canUndo, canRedo, patch, toggleShape, setColor, setShape, load, shuffle, undo, redo } = useLogo()
 const { designs, flash, saved, full, save, remove } = useDesigns()
 
 // A field with its own undo: the shortcuts leave it alone
@@ -48,6 +48,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
       @patch="patch"
       @toggle-shape="toggleShape"
       @set-color="setColor"
+      @set-shape="setShape"
       @undo="undo"
       @redo="redo"
       @shuffle="shuffle"

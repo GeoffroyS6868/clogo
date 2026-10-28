@@ -6,7 +6,7 @@ import type { Copy } from '~/utils/replicate'
 const props = defineProps<{ logo: Logo, animated?: boolean, ready?: boolean }>()
 
 const replica = computed(() => replicate(props.logo))
-const paths = computed(() => props.logo.shapes.map(s => shapePath(s.id, props.logo.corner, props.logo.smooth)))
+const paths = computed(() => props.logo.shapes.map(s => shapePath(s, props.logo.corner, props.logo.smooth)))
 
 // Own colour of a copy, or undefined to inherit currentColor from the group
 const colorOf = (c: Copy) => inkOf(props.logo, c.slot) ?? undefined

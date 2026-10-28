@@ -12,3 +12,7 @@ pnpm dev
 ```
 
 Conception détaillée dans [`docs/design.md`](docs/design.md).
+
+## Caractères
+
+La forme « Caractère » utilise les contours d'[Inter](https://rsms.me/inter/) Bold (© The Inter Project Authors), sous licence SIL Open Font License 1.1. `app/utils/glyphs.ts` en est généré par `pnpm glyphs` (police fournie par `@fontsource/inter`, lue avec `opentype.js`, deux dépendances de développement) ; seuls les contours des caractères ASCII sont embarqués.

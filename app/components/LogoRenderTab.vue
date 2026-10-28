@@ -52,7 +52,7 @@ const FILTER_BUTTONS = [
             aria-hidden="true"
             class="size-5 shrink-0 text-highlighted"
           >
-            <path :d="shapePath(shape.id, logo.corner, logo.smooth)" />
+            <path :d="shapePath(shape, logo.corner, logo.smooth)" />
           </svg>
           <span class="flex-1 text-xs text-highlighted">{{ SHAPES[shape.id].label }}</span>
           <ColorSwatch

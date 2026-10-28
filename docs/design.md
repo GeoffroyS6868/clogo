@@ -17,7 +17,7 @@ Créateur de logo : on choisit une à trois formes, elles sont répliquées selo
 ## Modèle
 
 ```ts
-type ShapeId = 'circle' | 'square' | 'triangle' | 'diamond' | 'petal' | 'bar' | 'arc' | 'star'
+type ShapeId = 'circle' | 'square' | 'polygon' | 'diamond' | 'star' | 'petal' | 'bar' | 'arc' | 'cross' | 'glyph'
 type Layout = 'circle' | 'grid' | 'triangle' | 'rays'
 type Paint = 'fill' | 'stroke'
 type Filter = 'none' | 'pixel' | 'hex'
@@ -25,6 +25,8 @@ type Filter = 'none' | 'pixel' | 'hex'
 interface ShapeSlot {
   id: ShapeId
   color: string | null // '#rrggbb', null = couleur automatique (currentColor)
+  count?: number       // étoile : branches 3–12 ; polygone : côtés 3–8 ; croix : bras 2–8. Présent seulement pour ces trois formes
+  char?: string        // caractère : un seul caractère de GLYPHS. Présent seulement pour 'glyph'
 }
 
 interface Logo {
@@ -49,7 +51,7 @@ interface Logo {
 }
 ```
 
-Le nombre de copies de chaque disposition est un champ à part : changer de disposition puis revenir retrouve le réglage d'avant. La couleur est portée par la forme (`ShapeSlot`) : elle la suit si l'ordre change.
+Le nombre de copies de chaque disposition est un champ à part : changer de disposition puis revenir retrouve le réglage d'avant. La couleur, le nombre de branches et le caractère sont portés par la forme (`ShapeSlot`) : ils la suivent si l'ordre change, et deux formes réglables gardent chacune leur réglage.
 
 Défaut : une fleur.
 
@@ -65,33 +67,53 @@ Défaut : une fleur.
 
 Stocké sous la clé `c-logo:logo:v1` (objet JSON). Lecture au montage côté client uniquement (la page est prérendue). Chaque champ est validé (type, bornes, couleurs au format `/^#[0-9a-f]{6}$/i`) ; `circleCount` est ensuite ramené au multiple du nombre de formes ; un champ invalide ou absent prend sa valeur par défaut, champ par champ. `shapes` est valide s'il contient 1 à 3 entrées valides sans doublon, sinon il prend sa valeur par défaut. Écriture à chaque changement.
 
+**Anciennes données** (logo courant et designs de la galerie, lus par le même `parseLogo`) : une forme `triangle` devient `{ id: 'polygon', count: 3 }` (même dessin) ; une `star` sans `count` devient une étoile à **4** branches (le dessin d'avant) ; un `count` hors bornes ou absent sur une forme réglable prend la valeur par défaut de la forme ; un `char` absent ou inconnu devient `'A'`. Une étoile ajoutée depuis la grille, elle, a 5 branches.
+
 ## Formes
 
 `app/utils/shapes.ts`. Toutes les formes sont dans la boîte unité `[-50, 50]²`, centrées sur l'origine, **pointant vers le haut** (−y). `radius` = rayon du cercle englobant depuis l'origine (sert au cadrage).
 
-Deux familles :
+Trois familles :
 
-- **À angles** : décrites par leurs sommets (`points`, dans le sens horaire). Le chemin est calculé par `shapePath(id, corner, smooth)`.
+- **À angles** : décrites par leurs sommets (dans le sens horaire), fixes ou **calculés d'après `count`** (étoile, polygone, croix). Le chemin est calculé par `shapePath`, avec l'arrondi.
 - **Courbes** : un chemin fixe (`d`), insensible à l'arrondi.
+- **Caractère** : le contour d'un caractère, pris dans `GLYPHS` ; insensible à l'arrondi.
 
 | id | label | famille | dessin |
 |---|---|---|---|
 | `circle` | Cercle | courbe | disque de rayon 50 |
 | `square` | Carré | angles | carré 100 × 100 (`radius` ≈ 70,7) |
-| `triangle` | Triangle | angles | équilatéral, pointe en haut, inscrit dans le cercle de rayon 50 |
+| `polygon` | Polygone | angles, `count` = côtés 3–8, défaut 3 | polygone régulier inscrit dans le cercle de rayon 50, un sommet en haut (`count = 3` : l'ancien triangle, sommets (0,−50) (43,3,25) (−43,3,25) ; identique à l'ancien chemin à `corner = 0`, à 0,01 près quand les angles sont arrondis, les anciens sommets étant arrondis à 43,3) |
 | `diamond` | Losange | angles | sommets (0,−50) (32,0) (0,50) (−32,0) |
+| `star` | Étoile | angles, `count` = branches 3–12, défaut 5 | `2·count` sommets alternés, pointes au rayon 50 (une en haut), creux au rayon `50 · r(count)` |
 | `petal` | Pétale | courbe | amande verticale : deux arcs de (0,−50) à (0,50), largeur max 56 |
 | `bar` | Barre | angles | rectangle 24 × 100 (`radius` ≈ 51,4) |
 | `arc` | Arc | courbe | demi-anneau ouvert vers le bas, rayons 50 et 26, descendu de 25 pour centrer sa boîte (`radius` ≈ 55,9) |
-| `star` | Étoile | angles | étoile à 4 branches, rayons 50 et 9,9·√2 |
+| `cross` | Croix | angles, `count` = bras 2–8, défaut 4 | `count` bras de largeur 24 partant du centre jusqu'au rayon 50 (`radius` = hypot(50, 12) ≈ 51,4), un bras vers le haut ; 2 bras = une barre, 4 = « + », 3 = Y, 6 = astérisque |
+| `glyph` | Caractère | caractère, `char` (défaut `A`) | le caractère, centré sur sa boîte englobante (pas sur sa ligne de base : un « g » est au milieu), mis à l'échelle pour que son plus grand côté fasse 100 |
+
+**Étoile.** Rapport des creux `r(n) = n ≤ 4 ? 0.28 : 0.382 + 0.02 · (n − 5)` : à 4 branches, l'étoile d'avant (creux à 9,9·√2 ≈ 14) ; à 5, l'étoile classique (0,382) ; les creux s'ouvrent un peu quand les branches se multiplient (0,52 à 12) pour que les branches restent lisibles.
+
+**Croix.** Pour `n` bras d'angles `θ_k = −90° + k · 360°/n`, de direction `u_k` et de normale `v_k` (vers la droite du bras, sens horaire) : sommets, pour chaque bras dans l'ordre, `50·u_k − 12·v_k`, `50·u_k + 12·v_k`, puis le coin rentrant entre ce bras et le suivant, sur leur bissectrice à la distance `12 / sin(π/n)` du centre. À 2 bras, ce coin rentrant tombe au milieu des grands côtés (sommets alignés : l'arrondi les laisse tels quels).
+
+L'ordre du tableau est celui de `SHAPE_IDS`, donc des boutons de l'onglet Forme (5 par ligne : cercle, carré, polygone, losange, étoile / pétale, barre, arc, croix, caractère).
+
+**Caractère.** `app/utils/glyphs.ts` est **généré** (pas écrit à la main) par `scripts/glyphs.mjs` (`pnpm glyphs`) depuis une police libre (OFL) en graisse grasse — Inter Bold, le fichier `.woff` du paquet `@fontsource/inter` (`inter-latin-700-normal.woff`) —, lue avec `opentype.js` (deux dépendances de développement seulement : rien n'est chargé dans l'app à l'exécution). Il exporte `GLYPHS: Record<string, { d: string, radius: number }>` pour les caractères ASCII imprimables `!` à `~` (94 caractères : lettres, chiffres, ponctuation, `& @ # % + * ?`…), chaque chemin déjà centré et mis à l'échelle comme décrit plus haut, nombres arrondis à 2 décimales, `radius` = distance maximale d'un point du contour à l'origine, arrondie au centième supérieur. Les courbes restent des quadratiques (`Q`, celles de la police) ; la police laisse ses contours ouverts, le script les ferme (`Z`) pour que le mode contour les referme aussi. Seul le contour tient dans `[-50, 50]` : un point de contrôle de quadratique peut le dépasser un peu (50,34 au pire, pour `~`). Les trous (« o », « g ») suivent les sens de tracé de la police : remplissage `nonzero`, le défaut. La licence de la police est rappelée en tête du fichier généré et dans le README.
 
 ```ts
-interface Shape { label: string, radius: number, points?: [number, number][], d?: string }
+interface Shape { label: string, radius: number | ((slot: ShapeSlot) => number), points?: Point[] | ((count: number) => Point[]), d?: string }
 const SHAPES: Record<ShapeId, Shape>
 const SHAPE_IDS: ShapeId[]                       // ordre d'affichage
-function isAngular(id: ShapeId): boolean         // a des `points`
-function shapePath(id: ShapeId, corner: number, smooth: boolean): string
+const SHAPE_COUNT: Partial<Record<ShapeId, { label: string, min: number, max: number, default: number }>>
+                                                 // star : « Branches » 3–12 (5) ; polygon : « Côtés » 3–8 (3) ; cross : « Bras » 2–8 (4)
+function isAngular(id: ShapeId): boolean         // a des sommets
+function newSlot(id: ShapeId): ShapeSlot         // avec count / char par défaut, color null
+const DEFAULT_CHAR = 'A'
+function shapeRadius(slot: ShapeSlot): number
+function shapePath(slot: ShapeSlot, corner: number, smooth: boolean): string
 ```
+
+Tous les appels qui passaient un `id` (aperçu, mosaïque, export, cadrage, mini-SVG des boutons, onglet Rendu) passent désormais la `ShapeSlot`.
 
 ### Arrondi des angles
 
@@ -191,7 +213,7 @@ Tout le logo est dans un groupe `scale(fit)`.
 
 **Aléatoire.** `randomLogo(rand = Math.random): Logo` tire :
 
-- 1 forme (60 %), 2 (30 %) ou 3 (10 %), distinctes ;
+- 1 forme (60 %), 2 (30 %) ou 3 (10 %), distinctes, **sans le caractère** (un caractère est un choix délibéré, pas un hasard heureux) ; une forme réglable reçoit un `count` tiré dans ses bornes ;
 - une disposition parmi les quatre, et chaque curseur dans sa plage (`circleCount` arrondi au multiple de `m`) ;
 - rotation et torsion arrondies à 5°, `twist` nul une fois sur trois ;
 - `paint` : `stroke` une fois sur quatre ; `corner` nul une fois sur deux, sinon dans `[0.2, 1]` ; `smooth` une fois sur deux.
@@ -357,14 +379,18 @@ Boutons à bascule : même logique actif/inactif que les onglets, avec `aria-pre
 
 **Onglet Forme**
 
-- **Formes** : grille de 8 `UButton` carrés (4 × 2), chacun avec un mini SVG de la forme (`viewBox="-50 -50 100 100"`, `size-5`, `fill="currentColor"`, chemin `shapePath` avec l'arrondi courant). Sélection multiple, jusqu'à 3 :
+- **Formes** : grille de 10 `UButton` carrés (5 × 2, ordre `SHAPE_IDS` : cercle, carré, polygone, losange, étoile / pétale, barre, arc, croix, caractère), chacun avec un mini SVG de la forme (`viewBox="-50 -50 100 100"`, `size-5`, `fill="currentColor"`, chemin `shapePath` avec l'arrondi courant ; pour une forme choisie, avec son `count` / `char` à elle, sinon ceux par défaut). Le bouton Caractère montre le texte « Aa » (`text-sm font-semibold`) au lieu d'un SVG tant qu'il n'est pas choisi, puis le contour du caractère choisi, comme les autres boutons. Sélection multiple, jusqu'à 3 :
   - clic sur une forme non choisie : ajoutée à la fin ; s'il y en a déjà 3, la plus ancienne (la première) sort ;
   - clic sur une forme choisie : retirée, sauf si c'est la seule ;
   - dès que 2 formes ou plus sont choisies, chaque forme choisie porte son numéro d'ordre (1, 2, 3) en petit (`text-[10px] text-muted`, coin haut-droit du bouton) : c'est l'ordre de l'alternance.
   - Quand le nombre de formes change, `circleCount` est ramené au multiple de `m` le plus proche, dans `[max(2, m), 24]`.
 - **Peinture** : « Plein » (`i-lucide-paint-bucket`) / « Contour » (`i-lucide-pen-line`).
 - **Coins** : une ligne de deux boutons à bascule, sous Plein / Contour (`gap-1` entre les deux lignes, comme une pile de barres) et sur le même modèle (`size="sm"`, libellés visibles) : `i-lucide-square-round-corner` « Arrondis » (`smooth: false`) / `i-lucide-squircle` « Squircle » (`smooth: true`). Visible seulement si au moins une forme choisie est à angles (comme la barre Arrondi). Toujours affichée dans ce cas, même à arrondi 0 : la faire apparaître quand on quitte 0 décalerait la barre sous le curseur pendant qu'on la fait glisser.
-- **Arrondi** (`corner`, 0–1, pas 0.01, en %) : première barre de la pile Arrondi / Taille / Rotation. Visible seulement si au moins une forme choisie est à angles.
+- **Réglages de forme**, en tête de la pile de barres, un par forme choisie qui en a un, dans l'ordre des formes :
+  - étoile, polygone, croix : une barre « Branches » / « Côtés » / « Bras » (`count`, bornes de `SHAPE_COUNT`, pas 1). Si deux formes choisies ont le même libellé (impossible aujourd'hui), on ne s'en soucie pas ;
+  - caractère : une ligne de même allure qu'une barre (`h-8 rounded-md bg-elevated`, libellé « Caractère » `text-sm text-default` à gauche), avec à droite un `<input>` d'un caractère (`w-10 text-center font-mono text-sm text-highlighted bg-transparent`, `maxlength` non utilisé : on garde **le dernier caractère tapé**, pour qu'on puisse remplacer sans effacer). Un caractère absent de `GLYPHS` est refusé : la valeur reste l'ancienne et la ligne tremble brièvement (`@keyframes shake`, 0,25 s ; rien sous `prefers-reduced-motion`). `aria-label` « Caractère », et une phrase `sr-only` « Lettres, chiffres et symboles courants. ». Le champ texte garde son propre `Ctrl+Z` (les raccourcis de la page l'ignorent déjà).
+  Chaque changement passe par `setShape(slot, changes)` dans `useLogo` (regroupé dans l'historique comme un `patch`).
+- **Arrondi** (`corner`, 0–1, pas 0.01, en %) : barre suivante de la pile Arrondi / Taille / Rotation. Visible seulement si au moins une forme choisie est à angles.
 - **Taille** (`size`, 0.1–1, pas 0.01, en %).
 - **Rotation** (`rotation`, 0–360, pas 1, en °).
 
@@ -376,7 +402,7 @@ Boutons à bascule : même logique actif/inactif que les onglets, avec `aria-pre
   - Grille : « Grille » (`gridSize`, 2–6, affiché « 3 × 3 ») ;
   - Triangle : « Rangées » (`triangleRows`, 2–6) ;
   - Rayons : « Branches » (`rayCount`, 2–12 ; la valeur affiche « 4 · croix » quand elle vaut 4) et « Longueur » (`rayLength`, 1–6).
-- **Écart** (`spread`, 0–1, pas 0.01, en %).
+- **Écart** (`spread`, pas 0.01, en %) : 0–100 % en Rond, **10–100 % en Grille, Triangle et Rayons**. À 0 %, toutes les copies sont au centre : en Rond, c’est une rosace ; ailleurs, des copies identiques empilées, et toutes les dispositions donnent la même image (on croit alors que les boutons de disposition ne marchent plus). La valeur enregistrée n’est pas modifiée : la géométrie et la barre utilisent `spreadOf(logo) = max(spread, minSpread(layout))`, si bien qu’en revenant en Rond, une rosace à 0 % le reste.
 - **Torsion** (`twist`, −180–180, pas 1, en °).
 
 **Onglet Rendu** (trois sections titrées `text-xs text-muted` : Fond, Formes, Filtre)
@@ -415,14 +441,16 @@ Le groupe de cadrage (`scale(fit)`) a la même transition, sur `transform` et `s
 
 | Fichier | Rôle |
 |---|---|
-| `app/types/logo.ts` | types `ShapeId`, `Layout`, `Paint`, `Filter`, `ShapeSlot`, `Logo`, `Design` |
-| `app/utils/shapes.ts` | `SHAPES`, `SHAPE_IDS`, `isAngular`, `shapePath` (arrondi) — pur |
+| `app/types/logo.ts` | types `ShapeId`, `Layout`, `Paint`, `Filter`, `ShapeSlot`, `ShapeChanges` (ce que `setShape` peut changer : tout sauf `id`), `Logo`, `Design` |
+| `app/utils/shapes.ts` | `SHAPES`, `SHAPE_IDS`, `SHAPE_COUNT`, `DEFAULT_CHAR`, `isAngular`, `newSlot`, `shapeRadius`, `shapePath` (formes réglables, arrondi) — pur |
+| `app/utils/glyphs.ts` | `GLYPHS` : contours des caractères — **généré** par `scripts/glyphs.mjs` (`pnpm glyphs`), ne pas éditer |
+| `scripts/glyphs.mjs` | lit la police avec `opentype.js` et écrit `app/utils/glyphs.ts` |
 | `app/utils/replicate.ts` | `replicate(logo)`, `toSvg(logo)`, `randomLogo(rand)`, `DEFAULT_LOGO`, `LOGO_LIMITS`, `LAYOUTS`, `MAX_SHAPES`, `COLOR_PATTERN`, `minCircleCount(m)`, `snapCircleCount(n, m)`, `roundTo` — pur |
 | `app/utils/mosaic.ts` | `mosaic(logo, sample)`, types `Sampler`, `Mosaic` — pur |
 | `app/utils/raster.ts` | `rasterSampler(logo, replica)` : dessine le logo sur un canvas caché et lit ses pixels |
 | `app/utils/download.ts` | `downloadSvg`, `downloadPng`, `copySvg` (mosaïque comprise) |
 | `app/utils/parseLogo.ts` | `parseLogo(data)` (validation champ par champ, sortie de `useLogo`), `changedFields(a, b)` (champs qui diffèrent : sert à regrouper l'historique), `sameLogo(a, b)`, `copyLogo(logo)` — pur |
-| `app/composables/useLogo.ts` | état, `ready`, lecture / écriture `localStorage`, historique (`undo`, `redo`, `canUndo`, `canRedo`), `patch(changes)`, `toggleShape(id)`, `setColor(slot, color)`, `load(logo)`, `shuffle()` (garde les couleurs) |
+| `app/composables/useLogo.ts` | état, `ready`, lecture / écriture `localStorage`, historique (`undo`, `redo`, `canUndo`, `canRedo`), `patch(changes)`, `toggleShape(id)`, `setColor(slot, color)`, `setShape(slot, changes)`, `load(logo)`, `shuffle()` (garde les couleurs) |
 | `app/composables/useDesigns.ts` | galerie : `designs`, `save(logo)`, `remove(id)`, `full`, `localStorage` |
 | `app/components/LogoArt.vue` | le SVG du logo (copies ou mosaïque) ; props `logo`, `animated`, `ready` : animé (plan de travail : transitions, fondu, mosaïque au plus une fois par frame) ou statique (vignettes : mosaïque calculée directement, sans transition) |
 | `app/components/LogoCanvas.vue` | plan de travail : cadre, fond, `LogoArt` animé |

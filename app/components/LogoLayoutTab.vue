@@ -81,9 +81,10 @@ const shapeCount = computed(() => props.logo.shapes.length)
       </template>
       <LogoSlider
         label="Écart"
-        :text="`${Math.round(logo.spread * 100)} %`"
+        :text="`${Math.round(spreadOf(logo) * 100)} %`"
         v-bind="LOGO_LIMITS.spread"
-        :model-value="logo.spread"
+        :min="minSpread(logo.layout)"
+        :model-value="spreadOf(logo)"
         @update:model-value="emit('patch', { spread: $event })"
       />
       <LogoSlider

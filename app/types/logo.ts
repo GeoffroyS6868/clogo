@@ -1,4 +1,4 @@
-export type ShapeId = 'circle' | 'square' | 'triangle' | 'diamond' | 'petal' | 'bar' | 'arc' | 'star'
+export type ShapeId = 'circle' | 'square' | 'polygon' | 'diamond' | 'star' | 'petal' | 'bar' | 'arc' | 'cross' | 'glyph'
 export type Layout = 'circle' | 'grid' | 'triangle' | 'rays'
 export type Paint = 'fill' | 'stroke'
 export type Filter = 'none' | 'pixel' | 'hex'
@@ -7,7 +7,14 @@ export interface ShapeSlot {
   id: ShapeId
   // '#rrggbb', null = automatic (currentColor)
   color: string | null
+  // Star branches, polygon sides, cross arms: only on those shapes
+  count?: number
+  // The character of a glyph shape: only on 'glyph'
+  char?: string
 }
+
+// What a shape setting can change: everything but which shape it is
+export type ShapeChanges = Partial<Omit<ShapeSlot, 'id'>>
 
 export interface Logo {
   shapes: ShapeSlot[]

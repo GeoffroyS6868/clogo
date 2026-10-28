@@ -78,6 +78,15 @@ export function snapCircleCount(count: number, m: number): number {
   return Math.min(max, Math.max(minCircleCount(m), Math.round(count / m) * m))
 }
 
+// At 0 every copy sits at the centre: a rosette in a circle, but in the other layouts
+// identical copies stacked on each other, so every layout looks the same
+const MIN_SPREAD = 0.1
+
+export const minSpread = (layout: Layout) => layout === 'circle' ? LOGO_LIMITS.spread.min : MIN_SPREAD
+
+// The stored value is kept (back to the circle, a rosette is still a rosette); geometry uses at least the minimum
+export const spreadOf = (logo: Logo) => Math.max(logo.spread, minSpread(logo.layout))
+
 const rad = (deg: number) => deg * Math.PI / 180
 
 function circleCopies({ circleCount: n, spread, size, rotation, twist, shapes }: Logo): Copy[] {
@@ -95,7 +104,9 @@ function circleCopies({ circleCount: n, spread, size, rotation, twist, shapes }:
   })
 }
 
-function gridCopies({ gridSize: n, spread, size, rotation, twist, shapes }: Logo): Copy[] {
+function gridCopies(logo: Logo): Copy[] {
+  const { gridSize: n, size, rotation, twist, shapes } = logo
+  const spread = spreadOf(logo)
   const pitch = spread * GRID_SPAN / (n - 1)
   const k = size * GRID_SIZE / n / 100
   const origin = (n - 1) / 2
@@ -113,7 +124,9 @@ function gridCopies({ gridSize: n, spread, size, rotation, twist, shapes }: Logo
   })
 }
 
-function triangleCopies({ triangleRows: r, spread, size, rotation, twist, shapes }: Logo): Copy[] {
+function triangleCopies(logo: Logo): Copy[] {
+  const { triangleRows: r, size, rotation, twist, shapes } = logo
+  const spread = spreadOf(logo)
   const pitch = spread * GRID_SPAN / (r - 1)
   const rowHeight = pitch * Math.sqrt(3) / 2
   const k = size * GRID_SIZE / r / 100
@@ -133,7 +146,9 @@ function triangleCopies({ triangleRows: r, spread, size, rotation, twist, shapes
   return copies
 }
 
-function rayCopies({ rayCount: b, rayLength: q, spread, size, rotation, twist, shapes }: Logo): Copy[] {
+function rayCopies(logo: Logo): Copy[] {
+  const { rayCount: b, rayLength: q, size, rotation, twist, shapes } = logo
+  const spread = spreadOf(logo)
   const radius = spread * RING_RADIUS
   const k = size * RING_SIZE / q / 100
   return Array.from({ length: b * q }, (_, i) => {
@@ -162,7 +177,7 @@ const LAYOUT_COPIES: Record<Layout, (logo: Logo) => Copy[]> = {
 
 export function replicate(logo: Logo): Replica {
   const copies = LAYOUT_COPIES[logo.layout](logo)
-  const extent = Math.max(...copies.map(c => Math.hypot(c.x, c.y) + SHAPES[logo.shapes[c.slot]!.id].radius * c.k))
+  const extent = Math.max(...copies.map(c => Math.hypot(c.x, c.y) + shapeRadius(logo.shapes[c.slot]!) * c.k))
   const fit = FIT_EXTENT / extent
   // Same scale for every copy; divided out so the line is STROKE units wide once fitted
   const strokeWidth = STROKE / ((copies[0]?.k ?? 1) * fit)
@@ -192,7 +207,7 @@ export function inkOf(logo: Logo, slot: number): string | null {
 export function toSvg(logo: Logo, tiles?: Mosaic): string {
   const { copies, fit, strokeWidth } = replicate(logo)
   const stroke = logo.paint === 'stroke'
-  const paths = logo.shapes.map(s => shapePath(s.id, logo.corner, logo.smooth))
+  const paths = logo.shapes.map(s => shapePath(s, logo.corner, logo.smooth))
   const group = stroke
     ? `fill="none" stroke="currentColor" stroke-width="${roundTo(strokeWidth)}" stroke-miterlimit="${MITER_LIMIT}"`
     : 'fill="currentColor"'
@@ -232,11 +247,13 @@ export function randomLogo(rand: () => number = Math.random): Logo {
   // Mostly one shape, sometimes a pair or a trio
   const roll = rand()
   const count = roll < 0.6 ? 1 : roll < 0.9 ? 2 : 3
-  const pool = [...SHAPE_IDS]
-  const shapes: ShapeSlot[] = Array.from({ length: count }, () => ({
-    id: pool.splice(int(0, pool.length - 1), 1)[0] ?? DEFAULT_LOGO.shapes[0]!.id,
-    color: null
-  }))
+  // A character is a deliberate choice, not a happy accident: the dice never draw one
+  const pool = SHAPE_IDS.filter(id => id !== 'glyph')
+  const shapes: ShapeSlot[] = Array.from({ length: count }, () => {
+    const slot = newSlot(pool.splice(int(0, pool.length - 1), 1)[0] ?? DEFAULT_LOGO.shapes[0]!.id)
+    const rule = SHAPE_COUNT[slot.id]
+    return rule ? { ...slot, count: int(rule.min, rule.max) } : slot
+  })
   return {
     shapes,
     layout: LAYOUTS[int(0, LAYOUTS.length - 1)] ?? DEFAULT_LOGO.layout,
