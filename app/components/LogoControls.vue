@@ -1,11 +1,24 @@
 <script setup lang="ts">
-const props = defineProps<{ logo: Logo }>()
+const props = defineProps<{
+  logo: Logo
+  designs: Design[]
+  flash: string | null
+  saved: boolean
+  full: boolean
+  canUndo: boolean
+  canRedo: boolean
+}>()
 const emit = defineEmits<{
   patch: [changes: Partial<Logo>]
   toggleShape: [id: ShapeId]
   setColor: [slot: number, color: string | null]
+  undo: []
+  redo: []
   shuffle: []
   reset: []
+  save: []
+  load: [logo: Logo]
+  remove: [id: string]
 }>()
 
 const COPIED_MS = 1500
@@ -19,6 +32,9 @@ const TABS = [
 type TabId = typeof TABS[number]['id']
 
 const tab = ref<TabId>('shape')
+const gallery = ref(false)
+// The shortcut shown in the labels: only known on the client
+const mod = ref('Ctrl')
 const copied = ref(false)
 let copiedTimer: ReturnType<typeof setTimeout> | undefined
 
@@ -49,6 +65,10 @@ async function onCopy() {
   }, COPIED_MS)
 }
 
+onMounted(() => {
+  if (/Mac/.test(navigator.userAgent)) mod.value = '⌘'
+})
+
 onBeforeUnmount(() => clearTimeout(copiedTimer))
 </script>
 
@@ -61,7 +81,29 @@ onBeforeUnmount(() => clearTimeout(copiedTimer))
       <h1 class="text-sm font-medium text-highlighted">
         c-logo
       </h1>
-      <div class="flex">
+      <div class="flex items-center">
+        <UButton
+          color="neutral"
+          variant="ghost"
+          size="sm"
+          icon="i-lucide-undo-2"
+          :aria-label="`Annuler (${mod}+Z)`"
+          :disabled="!canUndo"
+          @click="emit('undo')"
+        />
+        <UButton
+          color="neutral"
+          variant="ghost"
+          size="sm"
+          icon="i-lucide-redo-2"
+          :aria-label="`Rétablir (${mod}+Maj+Z)`"
+          :disabled="!canRedo"
+          @click="emit('redo')"
+        />
+        <div
+          aria-hidden="true"
+          class="mx-1 h-4 w-px bg-(--ui-border)"
+        />
         <UButton
           color="neutral"
           variant="ghost"
@@ -78,10 +120,20 @@ onBeforeUnmount(() => clearTimeout(copiedTimer))
           aria-label="Réinitialiser"
           @click="emit('reset')"
         />
+        <UButton
+          color="neutral"
+          :variant="gallery ? 'soft' : 'ghost'"
+          size="sm"
+          :icon="saved && !gallery ? 'i-lucide-check' : 'i-lucide-library'"
+          aria-label="Mes designs"
+          :aria-pressed="gallery"
+          @click="gallery = !gallery"
+        />
       </div>
     </header>
 
     <div
+      v-if="!gallery"
       role="tablist"
       aria-label="Sections"
       class="flex gap-1"
@@ -104,7 +156,18 @@ onBeforeUnmount(() => clearTimeout(copiedTimer))
       />
     </div>
 
+    <LogoGallery
+      v-if="gallery"
+      :logo="logo"
+      :designs="designs"
+      :flash="flash"
+      :full="full"
+      @save="emit('save')"
+      @load="emit('load', $event)"
+      @remove="emit('remove', $event)"
+    />
     <div
+      v-else
       :id="`panel-${tab}`"
       role="tabpanel"
       :aria-labelledby="tabId(tab)"

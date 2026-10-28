@@ -1,65 +1,12 @@
 const STORAGE_KEY = 'c-logo:logo:v1'
-
-interface Limit {
-  min: number
-  max: number
-}
-
-function num(value: unknown, fallback: number, { min, max }: Limit, integer = false): number {
-  const ok = typeof value === 'number' && value >= min && value <= max && (!integer || Number.isInteger(value))
-  return ok ? value : fallback
-}
-
-function color(value: unknown): string | null | undefined {
-  if (value === null) return null
-  return typeof value === 'string' && COLOR_PATTERN.test(value) ? value : undefined
-}
-
-// 1 to 3 valid entries without duplicates, otherwise the default
-function parseShapes(value: unknown): ShapeSlot[] {
-  if (!Array.isArray(value) || value.length < 1 || value.length > MAX_SHAPES) return DEFAULT_LOGO.shapes
-  const slots: ShapeSlot[] = []
-  for (const item of value) {
-    const id = SHAPE_IDS.find(s => s === item?.id)
-    const c = color(item?.color)
-    if (!id || c === undefined || slots.some(s => s.id === id)) return DEFAULT_LOGO.shapes
-    slots.push({ id, color: c })
-  }
-  return slots
-}
-
-// Field by field: an invalid or missing value falls back to the default
-function parse(data: unknown): Logo {
-  const d = DEFAULT_LOGO
-  const v = (typeof data === 'object' && data !== null ? data : {}) as Record<string, unknown>
-  const limits = LOGO_LIMITS
-  const shapes = parseShapes(v.shapes)
-  return {
-    shapes,
-    layout: LAYOUTS.find(id => id === v.layout) ?? d.layout,
-    circleCount: snapCircleCount(num(v.circleCount, d.circleCount, limits.circleCount, true), shapes.length),
-    gridSize: num(v.gridSize, d.gridSize, limits.gridSize, true),
-    triangleRows: num(v.triangleRows, d.triangleRows, limits.triangleRows, true),
-    rayCount: num(v.rayCount, d.rayCount, limits.rayCount, true),
-    rayLength: num(v.rayLength, d.rayLength, limits.rayLength, true),
-    spread: num(v.spread, d.spread, limits.spread),
-    size: num(v.size, d.size, limits.size),
-    rotation: num(v.rotation, d.rotation, limits.rotation),
-    twist: num(v.twist, d.twist, limits.twist),
-    paint: v.paint === 'fill' || v.paint === 'stroke' ? v.paint : d.paint,
-    corner: num(v.corner, d.corner, limits.corner),
-    smooth: typeof v.smooth === 'boolean' ? v.smooth : d.smooth,
-    background: color(v.background) ?? d.background,
-    filter: v.filter === 'none' || v.filter === 'pixel' || v.filter === 'hex' ? v.filter : d.filter,
-    cells: num(v.cells, d.cells, limits.cells, true),
-    gap: num(v.gap, d.gap, limits.gap)
-  }
-}
+const HISTORY_LIMIT = 100
+// A change that follows the last one within this delay, on the same fields, is the same gesture
+const GROUP_MS = 500
 
 function read(): Logo {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
-    return parse(raw ? JSON.parse(raw) : null)
+    return parseLogo(raw ? JSON.parse(raw) : null)
   } catch {
     return structuredClone(DEFAULT_LOGO)
   }
@@ -77,6 +24,12 @@ export function useLogo() {
   const logo = useState<Logo>('logo', () => structuredClone(DEFAULT_LOGO))
   // Turns true one frame after the saved logo is read: transitions stay off until then
   const ready = useState('logo-ready', () => false)
+  // In memory only: the current logo is saved, its history is not
+  const past = useState<Logo[]>('logo-past', () => [])
+  const future = useState<Logo[]>('logo-future', () => [])
+  const canUndo = computed(() => past.value.length > 0)
+  const canRedo = computed(() => future.value.length > 0)
+  let last: { at: number, fields: string } | null = null
 
   onMounted(() => {
     logo.value = read()
@@ -85,13 +38,20 @@ export function useLogo() {
     })
   })
 
-  function set(next: Logo) {
+  function set(next: Logo, { group = false } = {}) {
+    const fields = changedFields(logo.value, next).join()
+    if (!fields) return
+    const now = Date.now()
+    const sameGesture = group && last !== null && now - last.at < GROUP_MS && last.fields === fields
+    if (!sameGesture) past.value = [...past.value, logo.value].slice(-HISTORY_LIMIT)
+    future.value = []
+    last = group ? { at: now, fields } : null
     logo.value = next
     write(next)
   }
 
   function patch(changes: Partial<Logo>) {
-    set({ ...logo.value, ...changes })
+    set({ ...logo.value, ...changes }, { group: true })
   }
 
   // Add at the end (the oldest goes when full), or remove unless it is the last one
@@ -104,11 +64,39 @@ export function useLogo() {
     } else {
       next = [...shapes, { id, color: null }].slice(-MAX_SHAPES)
     }
-    patch({ shapes: next, circleCount: snapCircleCount(logo.value.circleCount, next.length) })
+    set({ ...logo.value, shapes: next, circleCount: snapCircleCount(logo.value.circleCount, next.length) })
   }
 
   function setColor(slot: number, color: string | null) {
     patch({ shapes: logo.value.shapes.map((s, i) => i === slot ? { ...s, color } : s) })
+  }
+
+  // Back to an earlier or later state: the next change starts a new step
+  function jump(target: Logo) {
+    last = null
+    logo.value = target
+    write(target)
+  }
+
+  function undo() {
+    const previous = past.value.at(-1)
+    if (!previous) return
+    past.value = past.value.slice(0, -1)
+    future.value = [...future.value, logo.value]
+    jump(previous)
+  }
+
+  function redo() {
+    const next = future.value.at(-1)
+    if (!next) return
+    future.value = future.value.slice(0, -1)
+    past.value = [...past.value, logo.value]
+    jump(next)
+  }
+
+  // A saved design: copied, so that later changes do not touch the gallery
+  function load(design: Logo) {
+    set(copyLogo(design))
   }
 
   function reset() {
@@ -129,5 +117,5 @@ export function useLogo() {
     })
   }
 
-  return { logo, ready, patch, toggleShape, setColor, reset, shuffle }
+  return { logo, ready, canUndo, canRedo, patch, toggleShape, setColor, load, reset, shuffle, undo, redo }
 }

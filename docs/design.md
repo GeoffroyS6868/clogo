@@ -275,6 +275,51 @@ Le chemin de chaque forme est calculé une fois (`shapePath`) et répété. Posi
 - `downloadPng(logo)` → `c-logo.png`, 1024 × 1024 : SVG chargé dans une `Image` via une URL de Blob, dessiné sur un `canvas`, `canvas.toBlob`. Fond transparent sauf si `background`. Les formes sans couleur sont noires.
 - `copySvg(logo)` → `navigator.clipboard.writeText(toSvg(logo, …))`.
 
+## Historique : annuler, rétablir
+
+Dans `useLogo`, en mémoire seulement (perdu au rechargement : le logo courant, lui, est toujours sauvegardé).
+
+```ts
+past: Logo[]     // au plus 100 états, le plus ancien sort
+future: Logo[]   // vidé dès qu'on modifie le logo après avoir annulé
+```
+
+- Chaque changement passe par `set(next, { group })`. L'état d'avant est poussé dans `past`, **sauf** s'il s'agit de la suite du même geste : `group` vrai, moins de 500 ms depuis le dernier changement, et le même ensemble de champs modifiés. Ainsi un curseur qu'on fait glisser (des dizaines de `patch` par seconde) ou une couleur choisie en direct dans le sélecteur ne compte que pour **un** pas d'annulation.
+- `patch` (et `setColor`, qui passe par lui) regroupe (`group: true`). `toggleShape`, `reset`, `shuffle` et `load` (charger un design) ne regroupent jamais : chacun est un pas à lui seul, et ils interrompent le regroupement en cours (un `patch` juste après un `reset` ouvre son propre pas).
+- Un changement qui ne change rien (même logo, champ par champ) n'est pas enregistré.
+- `undo()` : l'état courant passe dans `future`, le dernier de `past` devient courant. `redo()` : l'inverse. Les deux écrivent le `localStorage` comme tout changement, et cassent le regroupement en cours (le geste suivant ouvre un nouveau pas).
+- `canUndo` / `canRedo` : `computed`.
+
+**Raccourcis** (écoute sur `window`, posée au montage de la page, retirée au démontage) :
+
+| Touches | Action |
+|---|---|
+| `Ctrl`/`⌘` + `Z` | annuler |
+| `Ctrl`/`⌘` + `Maj` + `Z`, `Ctrl` + `Y` | rétablir |
+| `Ctrl`/`⌘` + `S` | enregistrer le design (voir Mes designs) ; empêche la sauvegarde de page du navigateur. Galerie fermée, l'icône « Mes designs » devient `i-lucide-check` pendant 1,5 s (`saved` dans `useDesigns`) |
+
+Ignorés si `e.isComposing`, ou si le focus est dans un champ de texte (`input` autre que `type="color"` / `range`, `textarea`, `contenteditable`), pour ne pas voler l'annulation native d'un champ.
+
+## Mes designs
+
+Une galerie de logos enregistrés pour plus tard, 100 % locale.
+
+```ts
+interface Design { id: string, logo: Logo, savedAt: number }
+```
+
+- `app/composables/useDesigns.ts` : `designs` (le plus récent d'abord), `flash` (id du design dont la vignette clignote, `null` sinon), `save(logo)`, `remove(id)`, `full`, et la constante `MAX_DESIGNS` (100). Clé `localStorage` `c-logo:designs:v1` (tableau JSON), lu au montage côté client. Chaque `logo` est validé par la même fonction que le logo courant (`parseLogo`, sortie de `useLogo` vers `app/utils/parseLogo.ts`) ; une entrée sans `id` texte ou `savedAt` nombre est écartée.
+- **Enregistrer** : ajoute le logo courant en tête (`crypto.randomUUID()`, `Date.now()`). Si un design identique existe déjà (`sameLogo(a, b)`, comparaison champ par champ, formes et couleurs comprises), rien n'est ajouté : sa vignette clignote (`@keyframes flash`, 0,6 s) et la galerie la fait défiler dans la vue. Le design identique est par définition le logo courant, donc déjà cerné (voir plus bas) : le clignotement est un second contour qui part du premier vers l'extérieur (`outline-offset` de 0 à 4 px) en s'effaçant ; avec `prefers-reduced-motion`, ce contour reste fixe pendant 0,6 s. Au plus **100** designs : au-delà, le bouton est désactivé, libellé « Galerie pleine ».
+- **Charger** : clic sur une vignette → `load(design.logo)` dans `useLogo` (une copie par `copyLogo`, pas `structuredClone` : les objets de l'état contiennent des proxys réactifs, que `structuredClone` refuse), annulable avec `Ctrl+Z`. `save` copie de la même façon.
+- **Supprimer** : petit bouton `i-lucide-x` dans le coin de la vignette, visible au survol ou au focus (comme les actions des bulles de memory). Premier clic : il devient `i-lucide-check` « Confirmer la suppression » pendant 3 s ; second clic dans ce délai : supprimé. La suppression ne passe pas par l'historique du logo (elle ne touche pas au logo courant).
+- La vignette du design identique au logo courant porte un contour `outline-2 outline-inverted` : on voit où on en est.
+
+**Affichage** : dans le panneau. Un bouton de l'en-tête bascule le corps du panneau entre les réglages (onglets + contenu) et la galerie. L'en-tête et la barre d'export restent en place.
+
+- Vue galerie : en haut, une ligne « Mes designs » (`text-xs text-muted`) + compteur (`12 / 100`, `tabular-nums`), puis un bouton pleine largeur `color="neutral" variant="soft"` `i-lucide-bookmark-plus` « Enregistrer ce design » ; dessous, une grille de vignettes 3 colonnes (`gap-2`), qui défile (`flex-1 overflow-y-auto`).
+- Galerie vide : un texte `text-sm text-muted` centré « Aucun design enregistré. » sous le bouton.
+- Vignette : un `<button>` natif `aspect-square`, squircle, `border border-default`, fond `bg-elevated` ou `background` du design, qui contient le logo en petit (`LogoArt` statique) ; `aria-label` « Charger le design du <date et heure courtes> » (`toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short" })` : l'heure distingue deux designs du même jour). Rayon `rounded-2xl` avec `corner-shape: squircle` plutôt que l'utilitaire `squircle`, dont le rayon (2 rem) est trop grand pour une vignette de 79 px. La page possède `useLogo()` et `useDesigns()` (chacun lit le `localStorage` à son montage) et les passe à `LogoControls` ; la galerie ne fait qu'émettre `save`, `load`, `remove`. Le bouton de suppression est un `UButton` `size="xs"` `variant="soft"` en position absolue, en haut à droite.
+
 ## Écran
 
 **Desktop (≥ `md`)** : le panneau est fixé à droite (`top-4 right-4 bottom-4`, `w-72`). Le plan de travail est centré dans le reste de l'écran (zone qui s'arrête à `19rem` du bord droit).
@@ -287,9 +332,14 @@ Le chemin de chaque forme est calculé une fois (`shapePath`) et répété. Posi
 
 `bg-default border border-default rounded-3xl p-4`, colonne, `gap-4`. De haut en bas :
 
-1. **En-tête** (fixe) : « c-logo » (`h1`, `text-sm font-medium text-highlighted`) ; à droite deux `UButton` icône seule, `color="neutral" variant="ghost" size="sm"` : `i-lucide-shuffle` « Aléatoire », `i-lucide-rotate-ccw` « Réinitialiser ».
-2. **Onglets** (fixe) : trois `UButton` côte à côte, `size="sm"`, `color="neutral"`, actif `variant="soft"`, sinon `ghost` : « Forme », « Disposition », « Rendu » (largeur selon le texte, `flex-auto`, rien n'est coupé). `role="tablist"` (`aria-label` « Sections ») / `role="tab"` / `aria-selected`, flèches gauche/droite pour passer d'un onglet à l'autre. L'onglet actif est un `ref` local (Forme au départ).
-3. **Contenu de l'onglet** (`role="tabpanel"`, `flex-1 overflow-y-auto`) — détaillé ci-dessous.
+1. **En-tête** (fixe) : « c-logo » (`h1`, `text-sm font-medium text-highlighted`) ; à droite des `UButton` icône seule, `color="neutral" variant="ghost" size="sm"`, dans cet ordre :
+   - `i-lucide-undo-2` « Annuler (Ctrl+Z) », `i-lucide-redo-2` « Rétablir (Ctrl+Maj+Z) », désactivés quand il n'y a rien à annuler / rétablir ;
+   - un séparateur vertical fin (`w-px h-4 bg-(--ui-border)`) ;
+   - `i-lucide-shuffle` « Aléatoire », `i-lucide-rotate-ccw` « Réinitialiser » ;
+   - `i-lucide-library` « Mes designs », à bascule (`variant="soft"` et `aria-pressed` quand la galerie est ouverte). Le libellé exact « (Ctrl+Z) » etc. utilise `⌘` sur Mac (`navigator.platform` / `userAgent` contient `Mac`), calculé au montage.
+   Tout doit tenir sur une ligne dans les 254 px utiles : en `size="sm"` (28 px par bouton), c'est le cas (titre 41 px, boutons 140 px, séparateur 9 px) ; en cas d'ajout, passer ces boutons en `size="xs"`.
+2. **Onglets** (fixe, masqués quand la galerie est ouverte) : trois `UButton` côte à côte, `size="sm"`, `color="neutral"`, actif `variant="soft"`, sinon `ghost` : « Forme », « Disposition », « Rendu » (largeur selon le texte, `flex-auto`, rien n'est coupé). `role="tablist"` (`aria-label` « Sections ») / `role="tab"` / `aria-selected`, flèches gauche/droite pour passer d'un onglet à l'autre. L'onglet actif est un `ref` local (Forme au départ).
+3. **Contenu de l'onglet** (`role="tabpanel"`, `flex-1 overflow-y-auto`) — détaillé ci-dessous — ou **la galerie** (voir Mes designs).
 4. **Export** (fixe, en bas) : `UButton` `color="neutral" variant="solid"` `i-lucide-download` « SVG », idem « PNG », et un bouton icône `variant="ghost"` `i-lucide-copy` « Copier le SVG » qui devient `i-lucide-check` pendant 1,5 s.
 
 Curseurs : `USlider`, `color="neutral"`, `size="sm"`, avec une ligne au-dessus : libellé `text-xs text-muted` à gauche, valeur `text-xs text-highlighted tabular-nums` à droite. Boutons à bascule : même logique actif/inactif que les onglets, avec `aria-pressed`.
@@ -344,7 +394,7 @@ Le groupe de cadrage (`scale(fit)`) a la même transition, sur `transform` et `s
 - Une copie qui apparaît entre en fondu : `@keyframes appear { from { opacity: 0 } }`, 0,3 s, déclenché dans le callback `ref` (attribut `data-appear`, retiré à `animationend`), seulement pour les indices nouveaux, une fois `ready`. Pas de `<TransitionGroup>` : sa translation FLIP écraserait le `transform` des copies. Une copie qui disparaît part sans animation.
 - Couleurs du fond et des formes : `transition: fill 0.2s, stroke 0.2s, background-color 0.2s`.
 - Changer de forme, d'arrondi ou de peinture : remplacement immédiat, pas de morphing.
-- **Premier rendu** : les transitions ne sont activées (`data-ready` sur le plan de travail) qu'un `requestAnimationFrame` après la lecture du `localStorage` (état `ready` de `useLogo()`), pour ne pas voir le logo par défaut se transformer en logo sauvegardé.
+- **Premier rendu** : les transitions ne sont activées (`data-ready` sur le plan de travail et sur le `<svg>` de `LogoArt`) qu'un `requestAnimationFrame` après la lecture du `localStorage` (état `ready` de `useLogo()`), pour ne pas voir le logo par défaut se transformer en logo sauvegardé.
 - `prefers-reduced-motion` : aucune transition, aucun fondu.
 
 **Avec un filtre**, le plan de travail affiche la mosaïque à la place des copies (le groupe des copies n'est pas rendu). La mosaïque est un `shallowRef` recalculé côté client quand le logo change, **au plus une fois par frame** (le changement programme un `requestAnimationFrame`, les changements suivants dans la même frame s'y rattachent). Les cellules n'ont pas de transition de position : elles changent d'une frame à l'autre, ce qui donne un mouvement « pixel art » pendant qu'on fait glisser un curseur. La transition de couleur (`fill 0.2s`) s'applique. Activer ou couper le filtre : remplacement immédiat. Tant que la première mosaïque n'est pas calculée (premier rendu), rien n'est affiché à la place.
@@ -353,18 +403,22 @@ Le groupe de cadrage (`scale(fit)`) a la même transition, sur `transform` et `s
 
 | Fichier | Rôle |
 |---|---|
-| `app/types/logo.ts` | types `ShapeId`, `Layout`, `Paint`, `Filter`, `ShapeSlot`, `Logo` |
+| `app/types/logo.ts` | types `ShapeId`, `Layout`, `Paint`, `Filter`, `ShapeSlot`, `Logo`, `Design` |
 | `app/utils/shapes.ts` | `SHAPES`, `SHAPE_IDS`, `isAngular`, `shapePath` (arrondi) — pur |
 | `app/utils/replicate.ts` | `replicate(logo)`, `toSvg(logo)`, `randomLogo(rand)`, `DEFAULT_LOGO`, `LOGO_LIMITS`, `LAYOUTS`, `MAX_SHAPES`, `COLOR_PATTERN`, `minCircleCount(m)`, `snapCircleCount(n, m)`, `roundTo` — pur |
 | `app/utils/mosaic.ts` | `mosaic(logo, sample)`, types `Sampler`, `Mosaic` — pur |
 | `app/utils/raster.ts` | `rasterSampler(logo, replica)` : dessine le logo sur un canvas caché et lit ses pixels |
 | `app/utils/download.ts` | `downloadSvg`, `downloadPng`, `copySvg` (mosaïque comprise) |
-| `app/composables/useLogo.ts` | état, `ready`, lecture / validation / écriture `localStorage`, `patch(changes)`, `toggleShape(id)`, `setColor(slot, color)`, `reset()`, `shuffle()` (garde les couleurs) |
-| `app/components/LogoCanvas.vue` | plan de travail, SVG animé à partir de `replicate()`, ou mosaïque si un filtre est actif |
+| `app/utils/parseLogo.ts` | `parseLogo(data)` (validation champ par champ, sortie de `useLogo`), `changedFields(a, b)` (champs qui diffèrent : sert à regrouper l'historique), `sameLogo(a, b)`, `copyLogo(logo)` — pur |
+| `app/composables/useLogo.ts` | état, `ready`, lecture / écriture `localStorage`, historique (`undo`, `redo`, `canUndo`, `canRedo`), `patch(changes)`, `toggleShape(id)`, `setColor(slot, color)`, `load(logo)`, `reset()`, `shuffle()` (garde les couleurs) |
+| `app/composables/useDesigns.ts` | galerie : `designs`, `save(logo)`, `remove(id)`, `full`, `localStorage` |
+| `app/components/LogoArt.vue` | le SVG du logo (copies ou mosaïque) ; props `logo`, `animated`, `ready` : animé (plan de travail : transitions, fondu, mosaïque au plus une fois par frame) ou statique (vignettes : mosaïque calculée directement, sans transition) |
+| `app/components/LogoCanvas.vue` | plan de travail : cadre, fond, `LogoArt` animé |
+| `app/components/LogoGallery.vue` | vue galerie du panneau : enregistrer, vignettes, charger, supprimer |
 | `app/components/LogoControls.vue` | panneau : en-tête, onglets, export |
 | `app/components/LogoShapeTab.vue` | onglet Forme |
 | `app/components/LogoLayoutTab.vue` | onglet Disposition |
 | `app/components/LogoRenderTab.vue` | onglet Rendu : couleurs et filtre (remplace `LogoColorTab.vue`) |
 | `app/components/LogoSlider.vue` | une ligne libellé + valeur + `USlider` (partagée par les onglets) |
 | `app/components/ColorSwatch.vue` | pastille + `<input type="color">` caché |
-| `app/pages/index.vue` | assemble le plan de travail et le panneau |
+| `app/pages/index.vue` | assemble le plan de travail et le panneau ; raccourcis clavier |

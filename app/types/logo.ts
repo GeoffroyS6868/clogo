@@ -32,3 +32,10 @@ export interface Logo {
   // Space between cells, as a fraction of a cell
   gap: number
 }
+
+export interface Design {
+  id: string
+  logo: Logo
+  // Date.now() at the time of saving
+  savedAt: number
+}
