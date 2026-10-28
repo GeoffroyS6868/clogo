@@ -55,6 +55,15 @@ export function mosaic(logo: Logo, sample: Sampler): Mosaic {
     const radius = w / Math.sqrt(3)
     const rowStep = 1.5 * radius
     const drawn = radius * (1 - logo.gap)
+    // Every hexagon has the same outline: written once, relative to its top vertex,
+    // so a cell only formats its starting point
+    const vertex = (k: number) => [drawn * Math.cos((-90 + 60 * k) * Math.PI / 180), drawn * Math.sin((-90 + 60 * k) * Math.PI / 180)] as const
+    const outline = Array.from({ length: HEX_SIDES - 1 }, (_, k) => {
+      const [x0, y0] = vertex(k)
+      const [x1, y1] = vertex(k + 1)
+      return `${r2(x1 - x0)} ${r2(y1 - y0)}`
+    })
+    const rest = `l${outline.join(' ')}Z`
     const rows = Math.ceil((HALF + radius) / rowStep)
     const cols = Math.ceil((HALF + w) / w) + 1
     for (let j = -rows; j <= rows; j++) {
@@ -66,12 +75,7 @@ export function mosaic(logo: Logo, sample: Sampler): Mosaic {
         const x = (i + shift) * w
         if (Math.abs(x) > HALF + w) continue
         const slot = shapeOf(x, y, w / 4)
-        if (slot < 0) continue
-        const corners = Array.from({ length: HEX_SIDES }, (_, k) => {
-          const a = (-90 + 60 * k) * Math.PI / 180
-          return `${r2(x + drawn * Math.cos(a))} ${r2(y + drawn * Math.sin(a))}`
-        })
-        cells[slot]!.push(`M${corners.join('L')}Z`)
+        if (slot >= 0) cells[slot]!.push(`M${r2(x)} ${r2(y - drawn)}${rest}`)
       }
     }
   }
