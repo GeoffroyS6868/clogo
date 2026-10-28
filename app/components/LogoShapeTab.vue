@@ -10,6 +10,11 @@ const PAINTS = [
   { id: 'stroke', label: 'Contour', icon: 'i-lucide-pen-line' }
 ] as const
 
+const CORNERS = [
+  { smooth: false, label: 'Arrondis', icon: 'i-lucide-square-round-corner' },
+  { smooth: true, label: 'Squircle', icon: 'i-lucide-squircle' }
+] as const
+
 const hasAngles = computed(() => props.logo.shapes.some(s => isAngular(s.id)))
 
 // Position in the selection, shown only when it matters (two shapes or more)
@@ -50,55 +55,69 @@ const chosen = (id: ShapeId) => order(id) !== -1
       </UButton>
     </div>
 
-    <div
-      role="group"
-      aria-label="Peinture"
-      class="grid grid-cols-2 gap-1"
-    >
-      <UButton
-        v-for="paint in PAINTS"
-        :key="paint.id"
-        color="neutral"
-        size="sm"
-        :variant="logo.paint === paint.id ? 'soft' : 'ghost'"
-        :icon="paint.icon"
-        :label="paint.label"
-        :aria-pressed="logo.paint === paint.id"
-        class="justify-center"
-        @click="emit('patch', { paint: paint.id })"
-      />
+    <div class="flex flex-col gap-1">
+      <div
+        role="group"
+        aria-label="Peinture"
+        class="grid grid-cols-2 gap-1"
+      >
+        <UButton
+          v-for="paint in PAINTS"
+          :key="paint.id"
+          color="neutral"
+          size="sm"
+          :variant="logo.paint === paint.id ? 'soft' : 'ghost'"
+          :icon="paint.icon"
+          :label="paint.label"
+          :aria-pressed="logo.paint === paint.id"
+          class="justify-center"
+          @click="emit('patch', { paint: paint.id })"
+        />
+      </div>
+      <div
+        v-if="hasAngles"
+        role="group"
+        aria-label="Coins"
+        class="grid grid-cols-2 gap-1"
+      >
+        <UButton
+          v-for="corner in CORNERS"
+          :key="corner.label"
+          color="neutral"
+          size="sm"
+          :variant="logo.smooth === corner.smooth ? 'soft' : 'ghost'"
+          :icon="corner.icon"
+          :label="corner.label"
+          :aria-pressed="logo.smooth === corner.smooth"
+          class="justify-center"
+          @click="emit('patch', { smooth: corner.smooth })"
+        />
+      </div>
     </div>
 
-    <LogoSlider
-      v-if="hasAngles"
-      label="Arrondi"
-      :text="`${Math.round(logo.corner * 100)} %`"
-      v-bind="LOGO_LIMITS.corner"
-      :model-value="logo.corner"
-      @update:model-value="emit('patch', { corner: $event })"
-    >
-      <UButton
-        color="neutral"
-        size="xs"
-        :variant="logo.smooth ? 'soft' : 'ghost'"
-        label="Lissé"
-        :aria-pressed="logo.smooth"
-        @click="emit('patch', { smooth: !logo.smooth })"
+    <div class="flex flex-col gap-1">
+      <LogoSlider
+        v-if="hasAngles"
+        label="Arrondi"
+        :text="`${Math.round(logo.corner * 100)} %`"
+        v-bind="LOGO_LIMITS.corner"
+        :model-value="logo.corner"
+        @update:model-value="emit('patch', { corner: $event })"
       />
-    </LogoSlider>
-    <LogoSlider
-      label="Taille"
-      :text="`${Math.round(logo.size * 100)} %`"
-      v-bind="LOGO_LIMITS.size"
-      :model-value="logo.size"
-      @update:model-value="emit('patch', { size: $event })"
-    />
-    <LogoSlider
-      label="Rotation"
-      :text="`${logo.rotation}°`"
-      v-bind="LOGO_LIMITS.rotation"
-      :model-value="logo.rotation"
-      @update:model-value="emit('patch', { rotation: $event })"
-    />
+      <LogoSlider
+        label="Taille"
+        :text="`${Math.round(logo.size * 100)} %`"
+        v-bind="LOGO_LIMITS.size"
+        :model-value="logo.size"
+        @update:model-value="emit('patch', { size: $event })"
+      />
+      <LogoSlider
+        label="Rotation"
+        :text="`${logo.rotation}°`"
+        v-bind="LOGO_LIMITS.rotation"
+        :model-value="logo.rotation"
+        @update:model-value="emit('patch', { rotation: $event })"
+      />
+    </div>
   </div>
 </template>

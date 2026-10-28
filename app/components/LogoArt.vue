@@ -79,7 +79,7 @@ const transform = (c: Copy) => `translate(${roundTo(c.x)}px, ${roundTo(c.y)}px) 
       data-fit
       :fill="logo.paint === 'fill' ? 'currentColor' : 'none'"
       :stroke="logo.paint === 'stroke' ? 'currentColor' : 'none'"
-      stroke-linejoin="round"
+      :stroke-miterlimit="MITER_LIMIT"
       :style="{ transform: `scale(${roundTo(replica.fit, 4)})`, strokeWidth: roundTo(replica.strokeWidth) }"
     >
       <g

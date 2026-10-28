@@ -99,10 +99,6 @@ export function useLogo() {
     set(copyLogo(design))
   }
 
-  function reset() {
-    set(structuredClone(DEFAULT_LOGO))
-  }
-
   // The dice explore the geometry: the user's colours and filter stay
   function shuffle() {
     const { shapes, background, filter, cells, gap } = logo.value
@@ -117,5 +113,5 @@ export function useLogo() {
     })
   }
 
-  return { logo, ready, canUndo, canRedo, patch, toggleShape, setColor, load, reset, shuffle, undo, redo }
+  return { logo, ready, canUndo, canRedo, patch, toggleShape, setColor, load, shuffle, undo, redo }
 }

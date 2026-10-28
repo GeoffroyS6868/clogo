@@ -64,6 +64,8 @@ const RING_SIZE = 320
 const GRID_SPAN = 700
 const GRID_SIZE = 800
 const STROKE = 14
+// Sharp outline joins (corners come from the path itself); high enough for the star's tips (ratio ≈ 4.1)
+export const MITER_LIMIT = 8
 
 export const roundTo = (v: number, digits = 2) => Number(v.toFixed(digits))
 
@@ -192,7 +194,7 @@ export function toSvg(logo: Logo, tiles?: Mosaic): string {
   const stroke = logo.paint === 'stroke'
   const paths = logo.shapes.map(s => shapePath(s.id, logo.corner, logo.smooth))
   const group = stroke
-    ? `fill="none" stroke="currentColor" stroke-width="${roundTo(strokeWidth)}" stroke-linejoin="round"`
+    ? `fill="none" stroke="currentColor" stroke-width="${roundTo(strokeWidth)}" stroke-miterlimit="${MITER_LIMIT}"`
     : 'fill="currentColor"'
   const body = logo.filter !== 'none' && tiles
     ? [

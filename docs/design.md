@@ -187,7 +187,7 @@ fit    = 430 / extent                      // marge de 70 sur un demi-côté de 
 
 Tout le logo est dans un groupe `scale(fit)`.
 
-**Contour.** En mode `stroke` : `fill="none"`, `stroke-linejoin="round"`. L'épaisseur vaut **14 unités du logo** une fois tout mis à l'échelle, donc `stroke-width = 14 / (k · fit)` (`strokeWidth` dans `Replica`, la même pour toutes les copies d'une disposition). Elle est posée une seule fois sur le groupe de cadrage et hérite jusqu'aux chemins (la valeur s'applique dans le repère de chaque chemin, après son `scale(k)`). Pas de `vector-effect`.
+**Contour.** En mode `stroke` : `fill="none"`, jointures pointues (`miter`, le défaut SVG, avec `stroke-miterlimit="8"` pour que les pointes de l’étoile restent pointues) : l’arrondi des coins ne vient que du réglage Arrondi, qui est dans le chemin. (Avant, `stroke-linejoin="round"` arrondissait les contours même à 0 %.) L'épaisseur vaut **14 unités du logo** une fois tout mis à l'échelle, donc `stroke-width = 14 / (k · fit)` (`strokeWidth` dans `Replica`, la même pour toutes les copies d'une disposition). Elle est posée une seule fois sur le groupe de cadrage et hérite jusqu'aux chemins (la valeur s'applique dans le repère de chaque chemin, après son `scale(k)`). Pas de `vector-effect`.
 
 **Aléatoire.** `randomLogo(rand = Math.random): Logo` tire :
 
@@ -222,7 +222,7 @@ function mosaic(logo: Logo, sample: Sampler): Mosaic
 `app/utils/raster.ts` (DOM) : `rasterSampler(logo, replica): Sampler`. Le logo est **dessiné une seule fois** sur un canvas caché, puis lu d'un bloc ; chaque point n'est plus qu'une lecture de tableau. Le coût ne dépend ni du nombre de copies ni de la peinture.
 
 - Canvas `S × S`, `S = min(1024, 8 · cells)` (8 pixels par cellule : assez fin pour 4 points par cellule), contexte `getContext('2d', { willReadFrequently: true })`, réutilisé d'un appel à l'autre.
-- Repère : `setTransform(S/1000, 0, 0, S/1000, S/2, S/2)` puis `scale(fit)` ; pour chaque copie, dans l'ordre (la dernière dessinée est au-dessus) : `translate(x, y)`, `rotate(angle)`, `scale(k)`, puis `fill(Path2D)` ou `stroke(Path2D)` (`lineWidth = strokeWidth`, `lineJoin = 'round'`).
+- Repère : `setTransform(S/1000, 0, 0, S/1000, S/2, S/2)` puis `scale(fit)` ; pour chaque copie, dans l'ordre (la dernière dessinée est au-dessus) : `translate(x, y)`, `rotate(angle)`, `scale(k)`, puis `fill(Path2D)` ou `stroke(Path2D)` (`lineWidth = strokeWidth`, `lineJoin = 'miter'`, `miterLimit = 8`).
 - Couleur de dessin = identifiant de la forme : `rgb(slot + 1, 0, 0)`, opaque.
 - `getImageData` une fois. Lecture d'un point : pixel `⌊(x + 500) · S / 1000⌋`, `⌊(y + 500) · S / 1000⌋` (borné au canvas) ; alpha < 128 → `null` ; sinon `slot = round(rouge) − 1`, borné à `[0, m − 1]` (les bords anticrénelés entre deux formes tombent sur l'une ou l'autre).
 
@@ -248,7 +248,7 @@ En contour, ce sont les traits qui sont tramés ; les cellules, elles, sont touj
 ```xml
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="-500 -500 1000 1000" width="1000" height="1000">
   <rect x="-500" y="-500" width="1000" height="1000" fill="#…"/>   <!-- seulement si background -->
-  <g transform="scale(fit)" fill="currentColor">                    <!-- ou fill="none" stroke="currentColor" stroke-width=… stroke-linejoin="round" -->
+  <g transform="scale(fit)" fill="currentColor">                    <!-- ou fill="none" stroke="currentColor" stroke-width=… stroke-miterlimit="8" -->
     <path d="…" transform="translate(x y) rotate(angle) scale(k)"/>
     <path d="…" transform="…" fill="#…"/>                            <!-- stroke="#…" en contour, si la forme a une couleur -->
     …
@@ -285,7 +285,7 @@ future: Logo[]   // vidé dès qu'on modifie le logo après avoir annulé
 ```
 
 - Chaque changement passe par `set(next, { group })`. L'état d'avant est poussé dans `past`, **sauf** s'il s'agit de la suite du même geste : `group` vrai, moins de 500 ms depuis le dernier changement, et le même ensemble de champs modifiés. Ainsi un curseur qu'on fait glisser (des dizaines de `patch` par seconde) ou une couleur choisie en direct dans le sélecteur ne compte que pour **un** pas d'annulation.
-- `patch` (et `setColor`, qui passe par lui) regroupe (`group: true`). `toggleShape`, `reset`, `shuffle` et `load` (charger un design) ne regroupent jamais : chacun est un pas à lui seul, et ils interrompent le regroupement en cours (un `patch` juste après un `reset` ouvre son propre pas).
+- `patch` (et `setColor`, qui passe par lui) regroupe (`group: true`). `toggleShape`, `shuffle` et `load` (charger un design) ne regroupent jamais : chacun est un pas à lui seul, et ils interrompent le regroupement en cours (un `patch` juste après un `shuffle` ouvre son propre pas).
 - Un changement qui ne change rien (même logo, champ par champ) n'est pas enregistré.
 - `undo()` : l'état courant passe dans `future`, le dernier de `past` devient courant. `redo()` : l'inverse. Les deux écrivent le `localStorage` comme tout changement, et cassent le regroupement en cours (le geste suivant ouvre un nouveau pas).
 - `canUndo` / `canRedo` : `computed`.
@@ -332,17 +332,28 @@ interface Design { id: string, logo: Logo, savedAt: number }
 
 `bg-default border border-default rounded-3xl p-4`, colonne, `gap-4`. De haut en bas :
 
-1. **En-tête** (fixe) : « c-logo » (`h1`, `text-sm font-medium text-highlighted`) ; à droite des `UButton` icône seule, `color="neutral" variant="ghost" size="sm"`, dans cet ordre :
-   - `i-lucide-undo-2` « Annuler (Ctrl+Z) », `i-lucide-redo-2` « Rétablir (Ctrl+Maj+Z) », désactivés quand il n'y a rien à annuler / rétablir ;
-   - un séparateur vertical fin (`w-px h-4 bg-(--ui-border)`) ;
-   - `i-lucide-shuffle` « Aléatoire », `i-lucide-rotate-ccw` « Réinitialiser » ;
-   - `i-lucide-library` « Mes designs », à bascule (`variant="soft"` et `aria-pressed` quand la galerie est ouverte). Le libellé exact « (Ctrl+Z) » etc. utilise `⌘` sur Mac (`navigator.platform` / `userAgent` contient `Mac`), calculé au montage.
-   Tout doit tenir sur une ligne dans les 254 px utiles : en `size="sm"` (28 px par bouton), c'est le cas (titre 41 px, boutons 140 px, séparateur 9 px) ; en cas d'ajout, passer ces boutons en `size="xs"`.
+1. **En-tête** (fixe) : pas de titre visible (l'onglet du navigateur dit déjà « c-logo » ; un `h1` `sr-only` le garde pour les lecteurs d'écran). Deux groupes de `UButton` icône seule, `color="neutral" variant="ghost" size="sm"`, aux deux bouts de la ligne :
+   - à gauche, l'historique : `i-lucide-undo-2` « Annuler (Ctrl+Z) », `i-lucide-redo-2` « Rétablir (Ctrl+Maj+Z) », désactivés quand il n'y a rien à annuler / rétablir ;
+   - à droite, le logo entier : `i-lucide-shuffle` « Aléatoire », `i-lucide-library` « Mes designs », à bascule (`variant="soft"` et `aria-pressed` quand la galerie est ouverte).
+   Le libellé « (Ctrl+Z) » etc. utilise `⌘` sur Mac (`userAgent` contient `Mac`), calculé au montage. Pas de bouton « Réinitialiser » : `Ctrl+Z` répare une erreur, et repartir de zéro n'a pas d'usage réel ici.
 2. **Onglets** (fixe, masqués quand la galerie est ouverte) : trois `UButton` côte à côte, `size="sm"`, `color="neutral"`, actif `variant="soft"`, sinon `ghost` : « Forme », « Disposition », « Rendu » (largeur selon le texte, `flex-auto`, rien n'est coupé). `role="tablist"` (`aria-label` « Sections ») / `role="tab"` / `aria-selected`, flèches gauche/droite pour passer d'un onglet à l'autre. L'onglet actif est un `ref` local (Forme au départ).
+   **Changement d'onglet animé**, pour qu'on lise bien des onglets :
+   - le fond de l'onglet actif est **un seul** indicateur (`bg-elevated rounded-md`, en `absolute` derrière les boutons, qui deviennent tous `variant="ghost"` sans fond propre) qui **glisse** d'un onglet à l'autre : `transform: translateX(...)` et `width` mesurés sur l'onglet actif (`getBoundingClientRect()` relatif à la liste d'onglets, car les onglets en `flex-auto` ont des largeurs fractionnaires que `offsetLeft` / `offsetWidth` arrondiraient ; remesurés par un `ResizeObserver` sur la liste et ses onglets, donc au redimensionnement, et à la recréation de la liste au retour de la galerie), `transition: transform 0.25s, width 0.25s` avec la courbe des copies `cubic-bezier(0.22, 1, 0.36, 1)`. Pas d'animation au premier affichage ni au retour de la galerie (la transition n'est activée qu'à l'image suivant la première mesure) ; tant qu'il n'est pas mesuré (rendu serveur), l'onglet actif porte lui-même `bg-elevated` pour qu'il n'y ait pas de saut ;
+   - le contenu entrant arrive avec un léger glissement dans le sens de la navigation (vers la droite → il vient de la droite) : `translateX(±12px)` et `opacity 0` → `0` / `1`, 0,2 s, même courbe. Le sens se déduit de la position des onglets (de gauche à droite : vers la droite), donc le passage de « Rendu » à « Forme » par la flèche droite vient de la gauche, comme l'indicateur qui revient en arrière. Le panneau est recréé à chaque onglet (`:key`), ce qui remet aussi le défilement en haut ; le contenu sortant disparaît sans animation (pas de chevauchement), et il n'y a pas de glissement au retour de la galerie ;
+   - `prefers-reduced-motion` : indicateur sans transition, contenu sans glissement.
 3. **Contenu de l'onglet** (`role="tabpanel"`, `flex-1 overflow-y-auto`) — détaillé ci-dessous — ou **la galerie** (voir Mes designs).
 4. **Export** (fixe, en bas) : `UButton` `color="neutral" variant="solid"` `i-lucide-download` « SVG », idem « PNG », et un bouton icône `variant="ghost"` `i-lucide-copy` « Copier le SVG » qui devient `i-lucide-check` pendant 1,5 s.
 
-Curseurs : `USlider`, `color="neutral"`, `size="sm"`, avec une ligne au-dessus : libellé `text-xs text-muted` à gauche, valeur `text-xs text-highlighted tabular-nums` à droite. Boutons à bascule : même logique actif/inactif que les onglets, avec `aria-pressed`.
+**Curseurs : des barres**, comme dans les panneaux de réglages des outils de design. Chaque curseur est une barre pleine largeur `h-8 rounded-md bg-elevated` ; la partie « remplie » (`bg-accented`) part de la gauche jusqu'à la valeur ; le libellé (`text-sm text-default`) est posé dans la barre à gauche (`pl-3`), la valeur (`text-sm text-highlighted font-mono tabular-nums`) à droite (`pr-3`). Pas de poignée visible. On clique ou on fait glisser **n'importe où dans la barre** (`cursor-ew-resize`) ; flèches, `Page↑/↓`, `Début/Fin` au clavier.
+
+- C'est toujours un `USlider` (accessibilité et clavier de Reka UI), restylé par sa prop `ui` : la racine et la piste font toute la barre, la plage (`range`) est le remplissage, la poignée (`thumb`) mesure `size-0` (invisible, mais elle garde le focus et le clavier, et il ne reste aucun décalage « in bounds » de Reka UI aux extrémités) ; pas de contour de focus : Reka UI donne le focus à la poignée au clic, donc un contour `:focus-visible` apparaissait aussi à la souris, ce qui faisait bizarre ; retiré à la demande. Libellé et valeur sont superposés en `absolute`, `pointer-events-none`, au-dessus du remplissage.
+- Le remplissage va de bord à bord : à la valeur min il est vide, à la valeur max il remplit toute la barre (pas de décalage dû à une poignée). Ses coins suivent ceux de la barre à gauche ; à droite il est droit, sauf à 100 %.
+- Les curseurs qui se suivent sont serrés (`gap-1`), en pile, comme une seule liste ; un groupe de curseurs est séparé du reste par l'espacement habituel.
+- **Survol** : la barre entière s'éclaircit légèrement (thème sombre) ou s'assombrit (thème clair) — un voile `bg-inverted/5` posé sur toute la barre, `pointer-events-none`, `transition-opacity 150ms`, visible au survol et pendant qu'on fait glisser (`:active`). Le contraste entre remplissage et fond ne change pas.
+- Pas de contrôle annexe dans la ligne d'une barre : la barre fait toute la largeur.
+- Un curseur signé (Torsion, −180° à 180°) se remplit lui aussi depuis la gauche.
+
+Boutons à bascule : même logique actif/inactif que les onglets, avec `aria-pressed`.
 
 **Onglet Forme**
 
@@ -352,7 +363,8 @@ Curseurs : `USlider`, `color="neutral"`, `size="sm"`, avec une ligne au-dessus :
   - dès que 2 formes ou plus sont choisies, chaque forme choisie porte son numéro d'ordre (1, 2, 3) en petit (`text-[10px] text-muted`, coin haut-droit du bouton) : c'est l'ordre de l'alternance.
   - Quand le nombre de formes change, `circleCount` est ramené au multiple de `m` le plus proche, dans `[max(2, m), 24]`.
 - **Peinture** : « Plein » (`i-lucide-paint-bucket`) / « Contour » (`i-lucide-pen-line`).
-- **Arrondi** (`corner`, 0–1, pas 0.01, en %) et, sur la même ligne que sa valeur, un petit bouton à bascule « Lissé » (`size="xs"`). Visibles seulement si au moins une forme choisie est à angles.
+- **Coins** : une ligne de deux boutons à bascule, sous Plein / Contour (`gap-1` entre les deux lignes, comme une pile de barres) et sur le même modèle (`size="sm"`, libellés visibles) : `i-lucide-square-round-corner` « Arrondis » (`smooth: false`) / `i-lucide-squircle` « Squircle » (`smooth: true`). Visible seulement si au moins une forme choisie est à angles (comme la barre Arrondi). Toujours affichée dans ce cas, même à arrondi 0 : la faire apparaître quand on quitte 0 décalerait la barre sous le curseur pendant qu'on la fait glisser.
+- **Arrondi** (`corner`, 0–1, pas 0.01, en %) : première barre de la pile Arrondi / Taille / Rotation. Visible seulement si au moins une forme choisie est à angles.
 - **Taille** (`size`, 0.1–1, pas 0.01, en %).
 - **Rotation** (`rotation`, 0–360, pas 1, en °).
 
@@ -410,7 +422,7 @@ Le groupe de cadrage (`scale(fit)`) a la même transition, sur `transform` et `s
 | `app/utils/raster.ts` | `rasterSampler(logo, replica)` : dessine le logo sur un canvas caché et lit ses pixels |
 | `app/utils/download.ts` | `downloadSvg`, `downloadPng`, `copySvg` (mosaïque comprise) |
 | `app/utils/parseLogo.ts` | `parseLogo(data)` (validation champ par champ, sortie de `useLogo`), `changedFields(a, b)` (champs qui diffèrent : sert à regrouper l'historique), `sameLogo(a, b)`, `copyLogo(logo)` — pur |
-| `app/composables/useLogo.ts` | état, `ready`, lecture / écriture `localStorage`, historique (`undo`, `redo`, `canUndo`, `canRedo`), `patch(changes)`, `toggleShape(id)`, `setColor(slot, color)`, `load(logo)`, `reset()`, `shuffle()` (garde les couleurs) |
+| `app/composables/useLogo.ts` | état, `ready`, lecture / écriture `localStorage`, historique (`undo`, `redo`, `canUndo`, `canRedo`), `patch(changes)`, `toggleShape(id)`, `setColor(slot, color)`, `load(logo)`, `shuffle()` (garde les couleurs) |
 | `app/composables/useDesigns.ts` | galerie : `designs`, `save(logo)`, `remove(id)`, `full`, `localStorage` |
 | `app/components/LogoArt.vue` | le SVG du logo (copies ou mosaïque) ; props `logo`, `animated`, `ready` : animé (plan de travail : transitions, fondu, mosaïque au plus une fois par frame) ou statique (vignettes : mosaïque calculée directement, sans transition) |
 | `app/components/LogoCanvas.vue` | plan de travail : cadre, fond, `LogoArt` animé |

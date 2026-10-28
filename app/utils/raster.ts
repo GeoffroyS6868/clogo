@@ -39,7 +39,8 @@ export function rasterSampler(logo: Logo, replica: Replica): Sampler {
   ctx.setTransform(unit, 0, 0, unit, side / 2, side / 2)
   ctx.scale(replica.fit, replica.fit)
   ctx.lineWidth = replica.strokeWidth
-  ctx.lineJoin = 'round'
+  ctx.lineJoin = 'miter'
+  ctx.miterLimit = MITER_LIMIT
   for (const c of replica.copies) {
     ctx.save()
     ctx.translate(c.x, c.y)

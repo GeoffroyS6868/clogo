@@ -15,7 +15,6 @@ const emit = defineEmits<{
   undo: []
   redo: []
   shuffle: []
-  reset: []
   save: []
   load: [logo: Logo]
   remove: [id: string]
@@ -39,6 +38,50 @@ const copied = ref(false)
 let copiedTimer: ReturnType<typeof setTimeout> | undefined
 
 const tabId = (id: TabId) => `tab-${id}`
+
+// Which way the incoming panel slides in; null when it should not (first display, back from the gallery)
+const slide = ref<'next' | 'prev' | null>(null)
+watch(tab, (now, before) => {
+  slide.value = TABS.findIndex(t => t.id === now) > TABS.findIndex(t => t.id === before) ? 'next' : 'prev'
+}, { flush: 'sync' })
+watch(gallery, () => {
+  slide.value = null
+})
+
+// One indicator slides behind the tabs; its box is measured from the active tab
+const tablist = ref<HTMLElement>()
+const bar = ref({ x: 0, width: 0 })
+const measured = ref(false)
+// Off until the first measure has been painted, so the indicator is placed, not animated
+const ready = ref(false)
+
+function measure() {
+  const el = document.getElementById(tabId(tab.value))
+  if (!tablist.value || !el || !el.offsetWidth) return
+  // Fractional box: the tabs share the row with flex-auto, so offsetLeft / offsetWidth would be off by up to half a pixel
+  const box = el.getBoundingClientRect()
+  const x = box.left - tablist.value.getBoundingClientRect().left
+  if (bar.value.x !== x || bar.value.width !== box.width) bar.value = { x, width: box.width }
+  measured.value = true
+}
+
+let observer: ResizeObserver | undefined
+
+// The tablist is recreated when coming back from the gallery
+watch(tablist, (el) => {
+  ready.value = false
+  observer?.disconnect()
+  if (!el) return
+  measure()
+  observer ??= new ResizeObserver(measure)
+  observer.observe(el)
+  el.querySelectorAll('[role=tab]').forEach(t => observer?.observe(t))
+  requestAnimationFrame(() => {
+    ready.value = true
+  })
+}, { flush: 'post' })
+
+watch(tab, measure, { flush: 'post' })
 
 // Left / right move between tabs, wrapping around; the focus follows
 function onTabKey(event: KeyboardEvent) {
@@ -69,7 +112,10 @@ onMounted(() => {
   if (/Mac/.test(navigator.userAgent)) mod.value = '⌘'
 })
 
-onBeforeUnmount(() => clearTimeout(copiedTimer))
+onBeforeUnmount(() => {
+  clearTimeout(copiedTimer)
+  observer?.disconnect()
+})
 </script>
 
 <template>
@@ -78,7 +124,7 @@ onBeforeUnmount(() => clearTimeout(copiedTimer))
     class="absolute inset-x-4 bottom-4 flex max-h-[45dvh] flex-col gap-4 rounded-3xl border border-default bg-default p-4 md:inset-x-auto md:top-4 md:right-4 md:max-h-none md:w-72"
   >
     <header class="flex items-center justify-between">
-      <h1 class="text-sm font-medium text-highlighted">
+      <h1 class="sr-only">
         c-logo
       </h1>
       <div class="flex items-center">
@@ -100,10 +146,8 @@ onBeforeUnmount(() => clearTimeout(copiedTimer))
           :disabled="!canRedo"
           @click="emit('redo')"
         />
-        <div
-          aria-hidden="true"
-          class="mx-1 h-4 w-px bg-(--ui-border)"
-        />
+      </div>
+      <div class="flex items-center">
         <UButton
           color="neutral"
           variant="ghost"
@@ -111,14 +155,6 @@ onBeforeUnmount(() => clearTimeout(copiedTimer))
           icon="i-lucide-shuffle"
           aria-label="Aléatoire"
           @click="emit('shuffle')"
-        />
-        <UButton
-          color="neutral"
-          variant="ghost"
-          size="sm"
-          icon="i-lucide-rotate-ccw"
-          aria-label="Réinitialiser"
-          @click="emit('reset')"
         />
         <UButton
           color="neutral"
@@ -134,24 +170,33 @@ onBeforeUnmount(() => clearTimeout(copiedTimer))
 
     <div
       v-if="!gallery"
+      ref="tablist"
       role="tablist"
       aria-label="Sections"
-      class="flex gap-1"
+      class="relative flex gap-1"
       @keydown="onTabKey"
     >
+      <span
+        aria-hidden="true"
+        data-indicator
+        :data-ready="ready || undefined"
+        :style="{ transform: `translateX(${bar.x}px)`, width: `${bar.width}px` }"
+        class="absolute inset-y-0 left-0 rounded-md bg-elevated"
+      />
       <UButton
         v-for="t in TABS"
         :id="tabId(t.id)"
         :key="t.id"
         color="neutral"
         size="sm"
-        :variant="tab === t.id ? 'soft' : 'ghost'"
+        variant="ghost"
         :label="t.label"
         role="tab"
         :aria-selected="tab === t.id"
         :aria-controls="`panel-${t.id}`"
         :tabindex="tab === t.id ? 0 : -1"
-        class="flex-auto justify-center"
+        :class="tab === t.id ? ['text-highlighted', { 'bg-elevated': !measured }] : ''"
+        class="relative flex-auto justify-center"
         @click="tab = t.id"
       />
     </div>
@@ -169,8 +214,10 @@ onBeforeUnmount(() => clearTimeout(copiedTimer))
     <div
       v-else
       :id="`panel-${tab}`"
+      :key="tab"
       role="tabpanel"
       :aria-labelledby="tabId(tab)"
+      :data-slide="slide ?? undefined"
       class="-mx-1 min-h-0 flex-1 overflow-y-auto px-1 py-1"
     >
       <LogoShapeTab
@@ -219,3 +266,38 @@ onBeforeUnmount(() => clearTimeout(copiedTimer))
     </div>
   </aside>
 </template>
+
+<style scoped>
+[data-indicator][data-ready] {
+  transition: transform 0.25s cubic-bezier(0.22, 1, 0.36, 1), width 0.25s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+[data-slide] {
+  animation: slide-in 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+[data-slide='next'] {
+  --slide-from: 12px;
+}
+
+[data-slide='prev'] {
+  --slide-from: -12px;
+}
+
+@keyframes slide-in {
+  from {
+    opacity: 0;
+    transform: translateX(var(--slide-from));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-indicator][data-ready] {
+    transition: none;
+  }
+
+  [data-slide] {
+    animation: none;
+  }
+}
+</style>

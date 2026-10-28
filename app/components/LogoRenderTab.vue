@@ -94,7 +94,10 @@ const FILTER_BUTTONS = [
           @click="emit('patch', { filter: filter.id })"
         />
       </div>
-      <template v-if="logo.filter !== 'none'">
+      <div
+        v-if="logo.filter !== 'none'"
+        class="flex flex-col gap-1"
+      >
         <LogoSlider
           label="Résolution"
           :text="logo.filter === 'pixel' ? `${logo.cells} × ${logo.cells}` : String(logo.cells)"
@@ -109,7 +112,7 @@ const FILTER_BUTTONS = [
           :model-value="logo.gap"
           @update:model-value="emit('patch', { gap: $event })"
         />
-      </template>
+      </div>
     </section>
   </div>
 </template>
