@@ -466,3 +466,24 @@ Le groupe de cadrage (`scale(fit)`) a la même transition, sur `transform` et `s
 | `app/components/LogoSlider.vue` | une ligne libellé + valeur + `USlider` (partagée par les onglets) |
 | `app/components/ColorSwatch.vue` | pastille + `<input type="color">` caché |
 | `app/pages/index.vue` | assemble le plan de travail et le panneau ; raccourcis clavier |
+
+## Performance
+
+Les mesures se relancent avec les scripts de `scripts/bench/`, sur un build de production (`pnpm build`) :
+
+| Script | Mesure |
+|---|---|
+| `node scripts/bench/bundle.mjs [out.json]` | taille de `.output/public` (brut, gzip, brotli), par type et pour le premier chargement |
+| `node scripts/bench/transfer.mjs http://localhost:3100 [br\|gzip]` | octets réellement transférés par une première visite (cache vide), tels que le serveur les envoie |
+| `node scripts/bench/mosaic.mjs <avant.ts> <après.ts>` | temps de `mosaic()` entre deux versions, en alternance ; vérifie d'abord que les sommets sont identiques |
+| `node scripts/bench/serve.mjs` puis, dans la page, `await import('http://localhost:3199/browser.mjs')` | dans l'app : chargement (FCP, LCP, requêtes, mémoire), latence d'un cran de curseur, vol des copies au changement de disposition, ouverture de la galerie |
+
+Les mesures image par image (`browser.mjs`) ne valent que si la page est affichée au premier plan : un onglet ou une fenêtre masqués n'ont plus d'images, ou une toutes les secondes. Les pauses de la fenêtre hôte sont comptées à part (`hostStalls`).
+
+**Choix qui comptent :**
+- le serveur envoie des copies pré-compressées (`nitro.compressPublicAssets`) : premier chargement **841 Ko → 199 Ko** transférés ;
+- les icônes sont dans le bundle (`icon.clientBundle.scan`) : plus de requête à l'API d'icônes au chargement ;
+- le CSS ne contient que les composants Nuxt UI utilisés (`ui.experimental.componentDetection`) : **219 Ko → 81 Ko** bruts ;
+- un hexagone de la mosaïque s'écrit en relatif depuis son sommet haut, avec un contour calculé une fois : `mosaic()` en hexagones à 64 cellules **13 ms → 2,4 ms** ;
+- les vignettes de la galerie (et leur bouton de suppression) ne sont dessinées qu'en approchant de la zone visible : ouverture d'une galerie de 60 designs **~210 ms → ~7 ms** de travail bloquant ;
+- l'échantillonneur de la mosaïque dessine le logo décalé d'un demi-pixel et lit le pixel le plus proche : sans cela, les points tombaient sur les bords des pixels et les mosaïques penchaient en haut à gauche (87 → 7 cas asymétriques sur 171 formes simples testées). Essayé et rejeté : 4 pixels par cellule au lieu de 8 (dessin 3× plus rapide, mais des cellules disparaissent sur les traits fins).
