@@ -63,7 +63,9 @@ const RING_RADIUS = 350
 const RING_SIZE = 320
 const GRID_SPAN = 700
 const GRID_SIZE = 800
-const STROKE = 14
+// Outline width in the unit shape (a 100-unit box): it scales with each shape,
+// so small copies keep a fine line instead of being filled by it
+const STROKE = 6
 // Sharp outline joins (corners come from the path itself); high enough for the star's tips (ratio ≈ 4.1)
 export const MITER_LIMIT = 8
 
@@ -179,9 +181,7 @@ export function replicate(logo: Logo): Replica {
   const copies = LAYOUT_COPIES[logo.layout](logo)
   const extent = Math.max(...copies.map(c => Math.hypot(c.x, c.y) + shapeRadius(logo.shapes[c.slot]!) * c.k))
   const fit = FIT_EXTENT / extent
-  // Same scale for every copy; divided out so the line is STROKE units wide once fitted
-  const strokeWidth = STROKE / ((copies[0]?.k ?? 1) * fit)
-  return { copies, fit, strokeWidth }
+  return { copies, fit, strokeWidth: STROKE }
 }
 
 // Relative luminance of a '#rrggbb' colour, 0 (black) to 1 (white)

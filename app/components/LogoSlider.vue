@@ -8,6 +8,7 @@ defineProps<{
   modelValue: number
 }>()
 const emit = defineEmits<{ 'update:modelValue': [value: number] }>()
+const { start } = useScrub()
 
 function onSlide(value: number | number[] | undefined) {
   if (typeof value === 'number') emit('update:modelValue', value)
@@ -25,7 +26,10 @@ const BAR_UI = {
 </script>
 
 <template>
-  <div class="group relative h-8 rounded-md">
+  <div
+    class="group relative h-8 rounded-md"
+    @pointerdown="start"
+  >
     <USlider
       color="neutral"
       :ui="BAR_UI"

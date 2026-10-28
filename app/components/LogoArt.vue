@@ -5,6 +5,8 @@ import type { Copy } from '~/utils/replicate'
 // animated: the work surface (transitions, fade-in, mosaic once per frame); otherwise a static thumbnail
 const props = defineProps<{ logo: Logo, animated?: boolean, ready?: boolean }>()
 
+const { scrubbing } = useScrub()
+
 const replica = computed(() => replicate(props.logo))
 const paths = computed(() => props.logo.shapes.map(s => shapePath(s, props.logo.corner, props.logo.smooth)))
 
@@ -73,6 +75,7 @@ const transform = (c: Copy) => `translate(${roundTo(c.x)}px, ${roundTo(c.y)}px) 
   <svg
     viewBox="-500 -500 1000 1000"
     :data-ready="animated && ready ? '' : undefined"
+    :data-scrub="animated && scrubbing ? '' : undefined"
   >
     <g
       v-if="logo.filter === 'none'"
@@ -121,6 +124,12 @@ svg[data-ready] [data-fit] {
 
 svg[data-ready] [data-copy] {
   transition: transform 0.45s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* While a bar is dragged the logo follows it directly */
+svg[data-scrub] [data-fit],
+svg[data-scrub] [data-copy] {
+  transition: none;
 }
 
 [data-appear] {
