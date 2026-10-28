@@ -17,7 +17,10 @@ const confirming = ref<string | null>(null)
 const grid = useTemplateRef('grid')
 let confirmTimer: ReturnType<typeof setTimeout> | undefined
 
-const label = (design: Design) => `Charger le design du ${new Date(design.savedAt).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' })}`
+// One formatter for every thumbnail: toLocaleString builds a new one on each call
+const DATE = new Intl.DateTimeFormat('fr-FR', { dateStyle: 'short', timeStyle: 'short' })
+
+const label = (design: Design) => `Charger le design du ${DATE.format(design.savedAt)}`
 
 // First click arms the button for a few seconds, the second one deletes
 function onRemove(id: string) {
@@ -32,6 +35,32 @@ function onRemove(id: string) {
     confirming.value = null
   }, CONFIRM_MS)
 }
+
+// A thumbnail (and its delete button) is drawn once it comes near the visible part of the grid, then kept:
+// opening a full gallery only draws the dozen in view (a filtered one costs a mosaic each)
+const shown = shallowRef(new Set<string>())
+let observer: IntersectionObserver | undefined
+
+function observe(el: unknown) {
+  if (el instanceof Element) observer?.observe(el)
+}
+
+onMounted(() => {
+  observer = new IntersectionObserver((entries) => {
+    const next = new Set(shown.value)
+    for (const entry of entries) {
+      const id = (entry.target as HTMLElement).dataset.id
+      if (entry.isIntersecting && id) {
+        next.add(id)
+        observer?.unobserve(entry.target)
+      }
+    }
+    if (next.size !== shown.value.size) shown.value = next
+  }, { root: grid.value, rootMargin: '100px' })
+  grid.value?.querySelectorAll('[data-id]').forEach(observe)
+})
+
+onBeforeUnmount(() => observer?.disconnect())
 
 // The design a duplicate save pointed to may be out of sight
 watch(() => props.flash, async (id) => {
@@ -74,6 +103,7 @@ onBeforeUnmount(() => clearTimeout(confirmTimer))
       <li
         v-for="design in designs"
         :key="design.id"
+        :ref="observe"
         :data-id="design.id"
         class="group relative"
       >
@@ -88,12 +118,14 @@ onBeforeUnmount(() => clearTimeout(confirmTimer))
           @click="emit('load', design.logo)"
         >
           <LogoArt
+            v-if="shown.has(design.id)"
             :logo="design.logo"
             aria-hidden="true"
             class="size-full"
           />
         </button>
         <UButton
+          v-if="shown.has(design.id)"
           color="neutral"
           variant="soft"
           size="xs"
