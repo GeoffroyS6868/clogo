@@ -104,18 +104,15 @@ export function useLogo() {
     set(copyLogo(design))
   }
 
-  // The dice explore the geometry: the user's colours and filter stay
+  // The dice explore the geometry: the user's colours stay
   function shuffle() {
-    const { shapes, scale, background, filter, cells, gap } = logo.value
+    const { shapes, scale, background } = logo.value
     const next = randomLogo()
     set({
       ...next,
       shapes: next.shapes.map((s, i) => ({ ...s, color: shapes[i]?.color ?? null })),
       scale,
-      background,
-      filter,
-      cells,
-      gap
+      background
     })
   }
 

@@ -8,7 +8,7 @@ const DESIGNS_KEY = 'c-logo:designs:v1'
 const BASE = {
   shapes: [{ id: 'petal', color: null }], layout: 'circle', circleCount: 8, gridSize: 3, triangleRows: 3,
   rayCount: 6, rayLength: 3, spread: 0.6, size: 0.5, rotation: 0, twist: 0, scale: 1, paint: 'fill',
-  corner: 0, smooth: false, background: null, filter: 'none', cells: 24, gap: 0
+  corner: 0, smooth: false, background: null
 }
 
 export const SCENARIOS = {
@@ -17,12 +17,6 @@ export const SCENARIOS = {
     ...BASE,
     shapes: [{ id: 'star', color: null, count: 7 }, { id: 'glyph', color: '#e5484d', char: 'g' }, { id: 'cross', color: null, count: 6 }],
     layout: 'rays', rayCount: 12, rayLength: 6, spread: 0.8, size: 0.7, twist: 15, paint: 'stroke', corner: 0.5, smooth: true
-  },
-  filtered: {
-    ...BASE,
-    shapes: [{ id: 'star', color: null, count: 7 }, { id: 'glyph', color: '#e5484d', char: 'g' }, { id: 'cross', color: null, count: 6 }],
-    layout: 'rays', rayCount: 12, rayLength: 6, spread: 0.8, size: 0.7, twist: 15, paint: 'stroke', corner: 0.5, smooth: true,
-    filter: 'hex', cells: 64, gap: 0.1
   }
 }
 
@@ -63,7 +57,7 @@ export function setup(name, { designs = 0 } = {}) {
     const list = Array.from({ length: designs }, (_, i) => ({
       id: `bench-${i}`,
       savedAt: 1e12 + i,
-      logo: { ...SCENARIOS[i % 3 === 0 ? 'filtered' : i % 3 === 1 ? 'heavy' : 'light'], rotation: i * 7 % 360, cells: 16 + i % 32 }
+      logo: { ...SCENARIOS[i % 2 ? 'heavy' : 'light'], rotation: i * 7 % 360 }
     }))
     localStorage.setItem(DESIGNS_KEY, JSON.stringify(list))
   } else {
@@ -152,7 +146,7 @@ export async function slider(label = 'Écart', { tab = 'layout', steps = 40, dra
     await macrotask()
     surface?.getBoundingClientRect()
     work.push(performance.now() - t0)
-    // Frame callbacks that ran before ours in the same frame (the filter's mosaic is computed there)
+    // Frame callbacks that ran before ours in the same frame
     inFrame.push(await new Promise(r => requestAnimationFrame(ts => r(performance.now() - ts))))
     await new Promise(r => setTimeout(r, 0))
     times.push(performance.now() - t0)

@@ -1,11 +1,5 @@
 const PNG_SIZE = 1024
 
-// The filter needs its mosaic first, which only the browser can compute
-function svgOf(logo: Logo): string {
-  const tiles = logo.filter === 'none' ? undefined : mosaic(logo, rasterSampler(logo, replicate(logo)))
-  return toSvg(logo, tiles)
-}
-
 function save(blob: Blob, name: string) {
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
@@ -17,11 +11,11 @@ function save(blob: Blob, name: string) {
 }
 
 export function downloadSvg(logo: Logo) {
-  save(new Blob([svgOf(logo)], { type: 'image/svg+xml' }), 'c-logo.svg')
+  save(new Blob([toSvg(logo)], { type: 'image/svg+xml' }), 'c-logo.svg')
 }
 
 export async function downloadPng(logo: Logo) {
-  const url = URL.createObjectURL(new Blob([svgOf(logo)], { type: 'image/svg+xml' }))
+  const url = URL.createObjectURL(new Blob([toSvg(logo)], { type: 'image/svg+xml' }))
   try {
     const img = new Image()
     await new Promise((resolve, reject) => {
@@ -41,5 +35,5 @@ export async function downloadPng(logo: Logo) {
 }
 
 export function copySvg(logo: Logo) {
-  return navigator.clipboard.writeText(svgOf(logo))
+  return navigator.clipboard.writeText(toSvg(logo))
 }

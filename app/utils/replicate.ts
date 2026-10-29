@@ -1,5 +1,3 @@
-import type { Mosaic } from '~/utils/mosaic'
-
 export interface Copy {
   x: number
   y: number
@@ -32,10 +30,7 @@ export const DEFAULT_LOGO: Logo = {
   paint: 'fill',
   corner: 0,
   smooth: false,
-  background: null,
-  filter: 'none',
-  cells: 24,
-  gap: 0
+  background: null
 }
 
 export const LOGO_LIMITS = {
@@ -49,9 +44,7 @@ export const LOGO_LIMITS = {
   rotation: { min: 0, max: 360, step: 1 },
   twist: { min: -180, max: 180, step: 1 },
   scale: { min: 0.5, max: 1.5, step: 0.01 },
-  corner: { min: 0, max: 1, step: 0.01 },
-  cells: { min: 8, max: 64, step: 1 },
-  gap: { min: 0, max: 0.5, step: 0.01 }
+  corner: { min: 0, max: 1, step: 0.01 }
 } as const
 
 export const LAYOUTS: Layout[] = ['circle', 'grid', 'triangle', 'rays']
@@ -207,37 +200,24 @@ export function inkOf(logo: Logo, slot: number): string | null {
   return luminance(logo.background) > 0.18 ? '#000000' : '#ffffff'
 }
 
-// With a filter and its mosaic, the copies give way to one path of cells per shape
-export function toSvg(logo: Logo, tiles?: Mosaic): string {
+export function toSvg(logo: Logo): string {
   const { copies, fit, strokeWidth } = replicate(logo)
   const stroke = logo.paint === 'stroke'
   const paths = logo.shapes.map(s => shapePath(s, logo.corner, logo.smooth))
   const group = stroke
     ? `fill="none" stroke="currentColor" stroke-width="${roundTo(strokeWidth)}" stroke-miterlimit="${MITER_LIMIT}"`
     : 'fill="currentColor"'
-  const body = logo.filter !== 'none' && tiles
-    ? [
-        '  <g fill="currentColor">',
-        ...tiles.paths.map((p) => {
-          const color = inkOf(logo, p.slot)
-          return `    <path d="${p.d}"${color ? ` fill="${color}"` : ''}/>`
-        }),
-        '  </g>'
-      ]
-    : [
-        `  <g transform="scale(${roundTo(fit, 4)})" ${group}>`,
-        ...copies.map((c) => {
-          const transform = `translate(${roundTo(c.x)} ${roundTo(c.y)}) rotate(${roundTo(c.angle)}) scale(${roundTo(c.k, 4)})`
-          const color = inkOf(logo, c.slot)
-          const own = color ? ` ${stroke ? 'stroke' : 'fill'}="${color}"` : ''
-          return `    <path d="${paths[c.slot]}" transform="${transform}"${own}/>`
-        }),
-        '  </g>'
-      ]
   return [
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${-VIEW} ${-VIEW} ${VIEW * 2} ${VIEW * 2}" width="${VIEW * 2}" height="${VIEW * 2}">`,
     ...(logo.background ? [`  <rect x="${-VIEW}" y="${-VIEW}" width="${VIEW * 2}" height="${VIEW * 2}" fill="${logo.background}"/>`] : []),
-    ...body,
+    `  <g transform="scale(${roundTo(fit, 4)})" ${group}>`,
+    ...copies.map((c) => {
+      const transform = `translate(${roundTo(c.x)} ${roundTo(c.y)}) rotate(${roundTo(c.angle)}) scale(${roundTo(c.k, 4)})`
+      const color = inkOf(logo, c.slot)
+      const own = color ? ` ${stroke ? 'stroke' : 'fill'}="${color}"` : ''
+      return `    <path d="${paths[c.slot]}" transform="${transform}"${own}/>`
+    }),
+    '  </g>',
     '</svg>',
     ''
   ].join('\n')
@@ -276,10 +256,7 @@ export function randomLogo(rand: () => number = Math.random): Logo {
     // Often sharp, otherwise clearly rounded
     corner: rand() < 0.5 ? 0 : roundTo(between(0.2, 1)),
     smooth: rand() < 0.5,
-    // Colours and filter are the user's: the dice only explore the geometry
-    background: null,
-    filter: DEFAULT_LOGO.filter,
-    cells: DEFAULT_LOGO.cells,
-    gap: DEFAULT_LOGO.gap
+    // Colours are the user's: the dice only explore the geometry
+    background: null
   }
 }

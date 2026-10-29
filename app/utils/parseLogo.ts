@@ -68,10 +68,7 @@ export function parseLogo(data: unknown): Logo {
     paint: v.paint === 'fill' || v.paint === 'stroke' ? v.paint : d.paint,
     corner: num(v.corner, d.corner, limits.corner),
     smooth: typeof v.smooth === 'boolean' ? v.smooth : d.smooth,
-    background: color(v.background) ?? d.background,
-    filter: v.filter === 'none' || v.filter === 'pixel' || v.filter === 'hex' ? v.filter : d.filter,
-    cells: num(v.cells, d.cells, limits.cells, true),
-    gap: num(v.gap, d.gap, limits.gap)
+    background: color(v.background) ?? d.background
   }
 }
 

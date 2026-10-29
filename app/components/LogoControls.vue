@@ -26,7 +26,7 @@ const COPIED_MS = 1500
 const TABS = [
   { id: 'shape', label: 'Forme' },
   { id: 'layout', label: 'Disposition' },
-  { id: 'render', label: 'Rendu' }
+  { id: 'color', label: 'Couleur' }
 ] as const
 
 type TabId = typeof TABS[number]['id']
@@ -233,7 +233,7 @@ onBeforeUnmount(() => {
         :logo="logo"
         @patch="emit('patch', $event)"
       />
-      <LogoRenderTab
+      <LogoColorTab
         v-else
         :logo="logo"
         @patch="emit('patch', $event)"

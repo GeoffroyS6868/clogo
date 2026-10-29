@@ -37,7 +37,7 @@ function onRemove(id: string) {
 }
 
 // A thumbnail (and its delete button) is drawn once it comes near the visible part of the grid, then kept:
-// opening a full gallery only draws the dozen in view (a filtered one costs a mosaic each)
+// opening a full gallery only draws the dozen in view
 const shown = shallowRef(new Set<string>())
 let observer: IntersectionObserver | undefined
 
